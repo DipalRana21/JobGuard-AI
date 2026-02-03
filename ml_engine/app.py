@@ -8,7 +8,7 @@ import re
 import nltk
 from nltk.corpus import stopwords
 from nltk.stem import WordNetLemmatizer
-
+from ddgs import DDGS
 
 
 # Legit companies don't hire on these.
@@ -132,7 +132,77 @@ def get_domain_age(url):
     except:
         return "Error"
     
+# --- UPDATED OSINT ENGINE (Captures Evidence for Report) ---
+def digital_footprint_scan(company_name):
+    if not company_name or len(company_name) < 2:
+        return {"score": 0, "status": "Not Analyzed", "sources": []}
+
+    print(f"🔎 Scanning DuckDuckGo for: {company_name}...")
     
+    query_zauba = f"site:zaubacorp.com {company_name}" 
+    query_linkedin = f"site:linkedin.com {company_name}" 
+
+    # We will store "Evidence" here to show in the Modal
+    evidence = []
+    found_zauba = False
+    found_linkedin = False
+    
+    try:
+        with DDGS() as ddgs:
+            # Fetch Zauba Result
+            r_zauba = list(ddgs.text(query_zauba, max_results=1))
+            if r_zauba:
+                found_zauba = True
+                evidence.append({
+                    "source": "Zauba Corp",
+                    "title": r_zauba[0]['title'],
+                    "url": r_zauba[0]['href'],
+                    "icon": "building"
+                })
+
+            # Fetch LinkedIn Result
+            r_linkedin = list(ddgs.text(query_linkedin, max_results=1))
+            if r_linkedin:
+                found_linkedin = True
+                evidence.append({
+                    "source": "LinkedIn",
+                    "title": r_linkedin[0]['title'],
+                    "url": r_linkedin[0]['href'],
+                    "icon": "briefcase"
+                })
+
+    except Exception as e:
+        print(f"⚠️ Search Error: {e}")
+        return {"score": 50, "status": "Search Error", "sources": []}
+
+    # --- SCORING ---
+    trust_score = 50
+    if found_zauba: trust_score += 30
+    else: trust_score -= 10
+
+    if found_linkedin: trust_score += 20
+    else: trust_score -= 10
+
+    # Verdict
+    if trust_score >= 80: status = "Verified Entity"
+    elif trust_score >= 60: status = "Likely Legitimate"
+    elif trust_score >= 40: status = "Unverified Startup"
+    else: status = "High Risk / Unknown"
+
+    return {
+        "score": trust_score,
+        "status": status,
+        "sources": evidence # <--- Sending the full evidence list now
+    }
+
+
+def extract_company_name(text):
+    match = re.search(r"(?:at|to|join)\s+([A-Z][a-zA-Z0-9\s]{2,20})", text)
+    if match:
+        return match.group(1).strip()
+    return None
+
+
 def check_brand_mismatch(text, url_domain):
     """
     Returns TRUE if text mentions a brand but URL doesn't match official domain.
@@ -217,6 +287,13 @@ def predict():
     job_text = data.get('text', '')
     job_url = data.get('url', '')
 
+    # Optional: Allow user to send company_name explicitly from Frontend
+    company_name_input = data.get('company_name', '')
+    
+    # If not provided, try to extract from text
+    extracted_name = extract_company_name(job_text)
+    final_company_name = company_name_input if company_name_input else extracted_name
+
     # --- 1. GIBBERISH CHECK (New!) ---
     if len(job_text) < MIN_TEXT_LENGTH:
         return jsonify({
@@ -267,11 +344,27 @@ def predict():
             risk_score += 30  # Heavy penalty.
             reasons.append(host_warning)
 
+    # . DIGITAL FOOTPRINT SCAN (The New Feature)
+    company_report = {"status": "Skipped", "details": [], "score": 50}
+    if final_company_name:
+        company_report = digital_footprint_scan(final_company_name)
+        if company_report['score'] >= 80: risk_score = max(0, risk_score - 30)
+        elif company_report['score'] < 40: risk_score += 20
+
     # C. BRAND MISMATCH (Kaggle vs kagg.com)
-    brand_warning = check_brand_mismatch(job_text, job_url)
-    if brand_warning:
-        risk_score = 100 # Instant Kill
-        reasons.append(brand_warning)
+    if job_url and "example.com" not in job_url:
+        domain_age = get_domain_age(job_url)
+        
+        # Check Brand Mismatch ONLY if we have a real URL
+        brand_warning = check_brand_mismatch(job_text, job_url)
+        if brand_warning:
+            risk_score = 100
+            domain_status = brand_warning
+        elif isinstance(domain_age, int) and domain_age < 30:
+            risk_score += 50
+            domain_status = f"New Domain ({domain_age} days)"
+        else:
+            domain_status = "Safe Domain"
 
     # D. NEW DOMAIN CHECK
     if isinstance(domain_age, int) and domain_age < 30:
@@ -296,7 +389,8 @@ def predict():
         "prediction": prediction_label,
         "risk_score": risk_score,
         "domain_status": domain_status,
-        "domain_age_days": domain_age
+        "domain_age_days": domain_age,
+        "company_analysis": company_report
     }
     
     return jsonify(result)
