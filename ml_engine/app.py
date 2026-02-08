@@ -9,7 +9,11 @@ import nltk
 from nltk.corpus import stopwords
 from nltk.stem import WordNetLemmatizer
 from ddgs import DDGS
-
+from vaderSentiment.vaderSentiment import SentimentIntensityAnalyzer
+from collections import Counter
+import hashlib
+import random
+from datetime import datetime
 
 # Legit companies don't hire on these.
 SUSPICIOUS_HOSTS = [
@@ -280,6 +284,260 @@ def check_hype_words(text):
     return found_hype
 
 
+# --- COMMUNITY SENTINEL ENGINE (FINAL: Title-Locked) ---
+def analyze_community_sentiment(company_name):
+    """
+    Searches Reddit/Quora/Glassdoor.
+    NUCLEAR OPTION: Only accepts results where Company Name is in the TITLE.
+    This kills 100% of "Recruiter asked me..." type irrelevant threads.
+    """
+    if not company_name: return None
+    
+    analyzer = SentimentIntensityAnalyzer()
+    print(f"🗣️  Scanning Community Sentiment for: {company_name}...")
+    
+    # Generate variations (e.g. "UrbanPiper" and "Urban Piper")
+    target_clean = company_name.lower().strip()
+    target_spaced = target_clean.replace(" ", "") # Handle "Urban Piper" -> "urbanpiper" logic if needed
+    
+    # 1. Targeted Queries
+    search_queries = [
+        f"site:reddit.com {company_name} review",
+        f"site:reddit.com {company_name} scam",
+        f"site:reddit.com {company_name} interview",
+        f"site:glassdoor.co.in {company_name} reviews",
+        f"site:ambitionbox.com {company_name} reviews"
+    ]
+    
+    mentions = []
+    compound_scores = []
+    seen_titles = set()
+    
+    try:
+        with DDGS() as ddgs:
+            for query in search_queries:
+                results = list(ddgs.text(query, max_results=2))
+                
+                for r in results:
+                    title = r['title'].strip()
+                    url = r['href']
+                    title_lower = title.lower()
+                    
+                    # --- FILTER 1: TITLE LOCK (The Fix) ---
+                    # The Company Name MUST be in the TITLE. No exceptions.
+                    # We check both "UrbanPiper" and "Urban Piper" variations if necessary
+                    if target_clean not in title_lower and target_spaced not in title_lower:
+                        continue 
+                    
+                    # --- FILTER 2: De-Duplication ---
+                    if title_lower in seen_titles:
+                        continue
+                    seen_titles.add(title_lower)
+
+                    # Analyze Sentiment
+                    text_content = title + " " + r['body']
+                    score = analyzer.polarity_scores(text_content)
+                    compound_score = score['compound']
+                    compound_scores.append(compound_score)
+                    
+                    # Clean Source Label
+                    if "reddit" in url: source = "Reddit"
+                    elif "quora" in url: source = "Quora"
+                    elif "glassdoor" in url: source = "Glassdoor"
+                    elif "ambitionbox" in url: source = "AmbitionBox"
+                    else: source = "Web"
+                    
+                    mentions.append({
+                        "source": source,
+                        "text": title,
+                        "url": url,
+                        "sentiment": "Negative" if compound_score < -0.05 else "Positive" if compound_score > 0.05 else "Neutral"
+                    })
+                    
+                    if len(mentions) >= 3: break
+                if len(mentions) >= 3: break
+
+    except Exception as e:
+        print(f"Sentiment Error: {e}")
+        return None
+
+    # CASE A: Clean Record
+    if not mentions:
+        return {
+            "average_score": 100, 
+            "status": "Clean Public Record 🛡️", 
+            "mentions": [] 
+        }
+
+    # CASE B: Discussions found
+    avg_score = sum(compound_scores) / len(compound_scores)
+    final_score = round(((avg_score + 1) / 2) * 100)
+    
+    if final_score < 40: sentiment_label = "Negative / Toxic 🚩"
+    elif final_score < 70: sentiment_label = "Mixed / Neutral 😐"
+    else: sentiment_label = "Positive / Reputable 🟢"
+
+    return {
+        "average_score": final_score,
+        "status": sentiment_label,
+        "mentions": mentions
+    }
+
+def generate_report_id(company_name):
+    # Generates ID like "REP-URB-2025-A1B2"
+    short_name = company_name[:3].upper()
+    date_str = datetime.now().strftime("%Y%m%d")
+    hash_part = hashlib.md5(company_name.encode()).hexdigest()[:4].upper()
+    return f"REP-{short_name}-{date_str}-{hash_part}"
+
+
+# --- NEW: THEMES EXTRACTOR ---
+def extract_key_themes(mentions):
+    """
+    Analyzes all reviews to find common complaints/praises.
+    """
+    text_blob = " ".join([m['text'] for m in mentions]).lower()
+    
+    # meaningful keywords to track
+    themes_db = {
+        "salary": ["salary", "pay", "stipend", "compensation", "money"],
+        "culture": ["culture", "environment", "toxic", "friendly", "politics"],
+        "management": ["management", "manager", "hr", "leadership", "founder"],
+        "work-life": ["work-life", "balance", "overtime", "weekend", "hours"],
+        "learning": ["learning", "growth", "mentor", "training"],
+        "interview": ["interview", "process", "round", "assignment"]
+    }
+    
+    found_themes = []
+    for theme, keywords in themes_db.items():
+        count = sum(text_blob.count(k) for k in keywords)
+        if count > 0:
+            found_themes.append({"topic": theme.title(), "mentions": count})
+            
+    # Sort by frequency
+    return sorted(found_themes, key=lambda x: x['mentions'], reverse=True)
+
+def extract_tech_stack(text_blob):
+    # Common tech keywords to look for
+    tech_keywords = [
+        "python", "react", "node", "aws", "java", "django", "flask", 
+        "docker", "kubernetes", "sql", "mongodb", "firebase", "next.js",
+        "typescript", "c++", "machine learning", "ai", "blockchain"
+    ]
+    found_stack = set()
+    for tech in tech_keywords:
+        if tech in text_blob.lower():
+            found_stack.add(tech.title()) # Capitalize (e.g., "React")
+    return list(found_stack)
+
+# company sentiment analysis
+def deep_dive_analysis(company_name):
+    print(f"🕵️‍♂️ Deep Dive Investigation for: {company_name}...")
+    
+    # 1. SEARCH QUERIES
+    search_queries = [
+        f"site:reddit.com {company_name} review",
+        f"site:glassdoor.co.in {company_name} reviews",
+        f"site:linkedin.com {company_name} about",
+        f"site:ambitionbox.com {company_name} reviews"
+    ]
+    
+    mentions = []
+    seen_titles = set()
+    analyzer = SentimentIntensityAnalyzer()
+    
+    # Big text blob for extraction
+    full_text_blob = "" 
+
+    try:
+        with DDGS() as ddgs:
+            for query in search_queries:
+                results = list(ddgs.text(query, max_results=4)) 
+                
+                for r in results:
+                    title = r['title'].strip()
+                    if company_name.lower().replace(" ", "") not in title.lower().replace(" ", ""):
+                        continue
+                        
+                    if title.lower() in seen_titles: continue
+                    seen_titles.add(title.lower())
+                    
+                    full_text_blob += " " + r['body'] + " " + title
+                    
+                    score = analyzer.polarity_scores(title + " " + r['body'])
+                    mentions.append({
+                        "source": "Reddit" if "reddit" in r['href'] else "Glassdoor" if "glassdoor" in r['href'] else "LinkedIn" if "linkedin" in r['href'] else "Web",
+                        "text": title,
+                        "snippet": r['body'][:150] + "...",
+                        "url": r['href'],
+                        "sentiment": "Negative" if score['compound'] < -0.05 else "Positive" if score['compound'] > 0.05 else "Neutral"
+                    })
+                    if len(mentions) >= 12: break
+                if len(mentions) >= 12: break
+                
+    except Exception as e:
+        print(f"Error: {e}")
+
+    # 2. EXTRACT INSIGHTS
+    themes = extract_key_themes(mentions) # Use existing function
+    tech_stack = extract_tech_stack(full_text_blob)
+    leadership = find_leadership(company_name)
+    
+    # 3. INTERVIEW DIFFICULTY (Simple Keyword Math)
+    difficulty_keywords = ["hard", "difficult", "leetcode", "dsa", "complex", "tough"]
+    easy_keywords = ["easy", "basic", "simple", "behavioral"]
+    
+    hard_count = sum(full_text_blob.lower().count(k) for k in difficulty_keywords)
+    easy_count = sum(full_text_blob.lower().count(k) for k in easy_keywords)
+    
+    # Avoid division by zero
+    total_diff = hard_count + easy_count
+    difficulty_score = int((hard_count / total_diff * 100)) if total_diff > 0 else 50 # Default to Medium
+    
+    # 4. FINAL SCORE
+    if not mentions: return {"status": "No Data", "score": 50}
+    avg_score = sum(m['sentiment'] == 'Positive' for m in mentions) / len(mentions) * 100
+    
+    return {
+        "report_id": generate_report_id(company_name), # <--- NEW DYNAMIC ID
+        "company_name": company_name,
+        "trust_score": int(avg_score),
+        "total_reviews": len(mentions),
+        "themes": themes,
+        "tech_stack": tech_stack, # <--- NEW
+        "leadership": leadership, # <--- NEW
+        "interview_difficulty": difficulty_score, # <--- NEW
+        "feed": mentions
+    }
+
+# --- HELPER: LEADERSHIP FINDER ---
+def find_leadership(company_name):
+    # Tries to find the CEO/Founder via Search
+    try:
+        query = f"{company_name} CEO founder linkedin"
+        with DDGS() as ddgs:
+            results = list(ddgs.text(query, max_results=1))
+            if results:
+                # Naive extraction: Just return the title and snippet
+                return {
+                    "source_title": results[0]['title'], # e.g. "Saurabh Gupta - Founder - UrbanPiper"
+                    "url": results[0]['href']
+                }
+    except:
+        return None
+    return None
+
+# --- NEW ROUTE FOR THE SEPARATE PAGE ---
+@app.route('/report', methods=['POST'])
+def generate_full_report():
+    data = request.json
+    company_name = data.get('company_name')
+    
+    # Run the Deep Dive
+    report_data = deep_dive_analysis(company_name)
+    
+    return jsonify(report_data)
+
 # --- API ENDPOINT ---
 @app.route('/predict', methods=['POST'])
 def predict():
@@ -346,10 +604,19 @@ def predict():
 
     # . DIGITAL FOOTPRINT SCAN (The New Feature)
     company_report = {"status": "Skipped", "details": [], "score": 50}
+    sentiment_report = None
+
     if final_company_name:
         company_report = digital_footprint_scan(final_company_name)
+
+        sentiment_report = analyze_community_sentiment(final_company_name)
         if company_report['score'] >= 80: risk_score = max(0, risk_score - 30)
         elif company_report['score'] < 40: risk_score += 20
+
+        if sentiment_report and sentiment_report['average_score'] < 30:
+            risk_score += 20
+
+       
 
     # C. BRAND MISMATCH (Kaggle vs kagg.com)
     if job_url and "example.com" not in job_url:
@@ -390,7 +657,8 @@ def predict():
         "risk_score": risk_score,
         "domain_status": domain_status,
         "domain_age_days": domain_age,
-        "company_analysis": company_report
+        "company_analysis": company_report,
+        "sentiment_analysis": sentiment_report
     }
     
     return jsonify(result)

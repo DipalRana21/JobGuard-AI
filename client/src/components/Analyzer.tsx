@@ -4,6 +4,8 @@ import axios from "axios";
 import { AlertTriangle, CheckCircle, XCircle, Search, Loader2, Globe, ShieldAlert, Briefcase, ExternalLink, X } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import clsx from "clsx";
+import { MessageSquare, ThumbsDown, ThumbsUp, Minus } from "lucide-react";
+import { useRouter } from "next/navigation";
 
 // Define the shape of the API response (TypeScript Magic)
 interface ScanResult {
@@ -16,6 +18,11 @@ interface ScanResult {
     score: number;
     sources: { source: string; title: string; url: string; icon: string }[];
   };
+  sentiment_analysis?: {
+    average_score: number;
+    status: string;
+    mentions: { source: string; text: string; url: string; sentiment: string }[];
+  };
 }
 
 export default function Analyzer() {
@@ -26,6 +33,8 @@ export default function Analyzer() {
   const [error, setError] = useState("");
   const [companyName, setCompanyName] = useState("");
   const [showReport, setShowReport] = useState(false);
+
+  const router = useRouter();
 
   const handleAnalyze = async () => {
     if (!text) return;
@@ -198,12 +207,74 @@ export default function Analyzer() {
                   {/* NEW: View Report Button */}
                   {result.company_analysis?.sources && result.company_analysis.sources.length > 0 && (
                     <button
-                      onClick={() => setShowReport(true)}
+                      onClick={() => (router.push(`/report/${encodeURIComponent(companyName)}`) , setShowReport(true))}
                       className="mt-4 w-full py-2 bg-purple-500/20 hover:bg-purple-500/30 border border-purple-500/50 rounded-lg text-purple-200 text-xs font-bold uppercase tracking-wider transition-all flex items-center justify-center gap-2"
                     >
                       <Search className="w-3 h-3" />
                       View Intelligence Report
                     </button>
+                  )}
+                </div>
+
+
+                {/* COMMUNITY SENTIMENT CARD */}
+                <div className="md:col-span-2 bg-white/5 p-6 rounded-lg border border-white/5 mt-4">
+                  <div className="flex items-center gap-2 mb-4 text-pink-300">
+                    <MessageSquare className="w-5 h-5" />
+                    <span className="text-xs font-bold uppercase">Community Sentinel (Reddit/Twitter/Glassdoor)</span>
+                  </div>
+
+                  {result.sentiment_analysis ? (
+                    <div className="grid md:grid-cols-2 gap-8">
+                      {/* Left: The Meter */}
+                      <div className="flex flex-col justify-center items-center">
+                        <div className="relative w-full h-4 bg-gray-700 rounded-full overflow-hidden">
+                          <motion.div
+                            initial={{ width: 0 }}
+                            animate={{ width: `${result.sentiment_analysis.average_score}%` }}
+                            className={clsx("h-full rounded-full transition-all duration-1000",
+                              result.sentiment_analysis.average_score < 40 ? "bg-red-500" :
+                                result.sentiment_analysis.average_score < 70 ? "bg-yellow-500" : "bg-green-500"
+                            )}
+                          />
+                        </div>
+                        <div className="flex justify-between w-full text-xs text-gray-400 mt-2">
+                          <span>Toxic</span>
+                          <span>Neutral</span>
+                          <span>Safe</span>
+                        </div>
+                        <h3 className="text-2xl font-bold text-white mt-2">{result.sentiment_analysis.status}</h3>
+                      </div>
+
+                      {/* Right: Discussions OR Clean Record Message */}
+                      <div className="space-y-3">
+                        {result.sentiment_analysis.mentions.length > 0 ? (
+                          result.sentiment_analysis.mentions.map((m, i) => (
+                            <a key={i} href={m.url} target="_blank" className="block bg-[#0f172a] p-3 rounded-lg border border-white/5 hover:border-pink-500/30 transition-all text-xs group">
+                              <div className="flex justify-between items-center mb-1">
+                                <span className="font-bold text-pink-400 group-hover:text-pink-300">{m.source}</span>
+                                <span className={clsx("px-2 py-0.5 rounded text-[10px]",
+                                  m.sentiment === "Negative" ? "bg-red-500/20 text-red-300" :
+                                    m.sentiment === "Positive" ? "bg-green-500/20 text-green-300" : "bg-gray-700 text-gray-300"
+                                )}>{m.sentiment}</span>
+                              </div>
+                              <p className="text-gray-300 truncate">{m.text}</p>
+                            </a>
+                          ))
+                        ) : (
+                          // THIS IS THE NEW "HONEST" UI FOR B2B COMPANIES
+                          <div className="flex flex-col items-center justify-center h-full p-4 bg-green-500/5 border border-green-500/20 rounded-lg text-center">
+                            <ThumbsUp className="w-8 h-8 text-green-500 mb-2" />
+                            <h4 className="text-white font-bold text-sm">No Red Flags Found</h4>
+                            <p className="text-xs text-gray-400 mt-1">
+                              We searched Reddit, Quora, and Glassdoor but found no verified scam reports or toxic discussions. This is a positive sign.
+                            </p>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  ) : (
+                    <p className="text-gray-500 italic">No community data available.</p>
                   )}
                 </div>
 

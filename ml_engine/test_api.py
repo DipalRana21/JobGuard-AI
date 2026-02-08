@@ -155,3 +155,32 @@ Good weekly income. Best for students and freshers.
 Contact immediately to fix your slot.
 """
 run_test("Naturally Ambiguous (Vague Job)", text_9, "unknown-job-board.xyz", "Suspicious")
+
+
+
+# Role: Software Development Engineer - Intern (Backend)
+# Location: Bangalore (On-site)
+# Stipend: ₹35,000 per month
+
+# About Us:
+# UrbanPiper is building a platform to help restaurants manage their online presence. We are backed by Swiggy and Zomato. We are looking for passionate engineers to join our backend team.
+
+# Responsibilities:
+# - Work on Python and Django to build scalable APIs.
+# - Collaborate with the frontend team to integrate user-facing elements.
+# - Optimize applications for maximum speed and scalability.
+# - Participate in code reviews and team discussions.
+
+# Requirements:
+# - Strong knowledge of Data Structures and Algorithms.
+# - Experience with Python or Java is a plus.
+# - Final year students or fresh graduates (2025/2026 batch).
+# - Ability to work in a fast-paced environment.
+
+# Selection Process:
+# 1. Online Coding Round.
+# 2. Technical Interview.
+# 3. HR Discussion.
+
+# How to Apply:
+# Send your resume to careers@urbanpiper.com or apply via our LinkedIn page.
