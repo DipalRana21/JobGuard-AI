@@ -3,6 +3,7 @@ import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
 import { Inter } from "next/font/google";
 import Navbar from "@/components/Navbar";
+import { AuthProvider } from "@/components/Provider";
 
 const inter = Inter({ subsets: ["latin"] });
 
@@ -18,7 +19,7 @@ const geistMono = Geist_Mono({
 
 export const metadata: Metadata = {
   title: "JobGuard AI",
-  description: "Advanced AI system to detect fraudulent job postings.",
+  description: "AI-Powered Corporate Intelligence & Fraud Defense",
 };
 
 // TS Interface: Defining what props this component accepts
@@ -32,7 +33,10 @@ export default function RootLayout({ children }: RootLayoutProps) {
         <Navbar />
         {/* pt-20 adds padding-top so content doesn't hide behind fixed Navbar */}
         <main className="flex-grow pt-20 px-4 max-w-7xl mx-auto w-full">
-          {children}
+          <AuthProvider>
+            {children}
+          </AuthProvider>
+          
         </main>
         
         <footer className="border-t border-white/10 py-6 text-center text-gray-500 text-sm mt-10">
