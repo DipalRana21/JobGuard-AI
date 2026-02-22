@@ -6,6 +6,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import clsx from "clsx";
 import { MessageSquare, ThumbsDown, ThumbsUp, Minus } from "lucide-react";
 import { useRouter } from "next/navigation";
+import { useSession } from "next-auth/react";
 
 // Define the shape of the API response (TypeScript Magic)
 interface ScanResult {
@@ -35,6 +36,7 @@ export default function Analyzer() {
   const [showReport, setShowReport] = useState(false);
 
   const router = useRouter();
+  const { data: session } = useSession();
 
   const handleAnalyze = async () => {
     if (!text) return;
@@ -49,7 +51,22 @@ export default function Analyzer() {
         url: url,
         company_name: companyName
       });
-      setResult(response.data);
+      
+      const mlData = response.data;
+      setResult(mlData);
+
+      // 2. DIRECTLY SAVE THE EXACT ML RISK SCORE TO DATABASE
+      if (session?.user && companyName) {
+        // Generate a simple ID for the database
+        const generatedReportId = `REP-${companyName.substring(0, 3).toUpperCase()}-${Date.now()}`;
+        
+        await axios.post("/api/scans", {
+          reportId: generatedReportId,
+          companyName: companyName,
+          riskScore: mlData.risk_score, 
+        });
+        console.log("✅ Exact ML Risk Score saved to database!");
+      }
     } catch (err) {
       setError("Server Error. Is the Python backend running?");
     } finally {
@@ -96,6 +113,17 @@ export default function Analyzer() {
               placeholder="e.g. Infosys, Sharma Startups Pvt Ltd"
               value={companyName}
               onChange={(e) => setCompanyName(e.target.value)}
+            />
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-blue-200 mb-2">Application Link / Domain (Optional)</label>
+            <input
+              type="url"
+              className="w-full bg-[#0f172a]/60 border border-blue-500/20 rounded-xl py-3 px-4 text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-blue-500/50 transition-all"
+              placeholder="e.g. https://careers.google.com/..."
+              value={url}
+              onChange={(e) => setUrl(e.target.value)}
             />
           </div>
 
@@ -278,14 +306,32 @@ export default function Analyzer() {
                   )}
                 </div>
 
-                <div className="bg-white/5 p-4 rounded-lg border border-white/5">
-                  <div className="flex items-center gap-2 mb-2 text-blue-300">
+                {/* UPGRADED SAFETY LOG CARD */}
+                <div className={clsx(
+                  "p-4 rounded-lg border flex flex-col justify-between transition-all",
+                  result.domain_status.toLowerCase().includes("safe") || result.domain_status.toLowerCase().includes("clean")
+                    ? "bg-green-500/10 border-green-500/20 text-green-300"
+                    : result.domain_status.toLowerCase().includes("warning") || result.domain_status.toLowerCase().includes("detected") || result.domain_status.toLowerCase().includes("🚩")
+                    ? "bg-red-500/10 border-red-500/40 text-red-200 shadow-[0_0_15px_rgba(239,68,68,0.15)]"
+                    : "bg-white/5 border-white/5 text-gray-300"
+                )}>
+                  <div className="flex items-center gap-2 mb-3">
                     <ShieldAlert className="w-4 h-4" />
-                    <span className="text-xs font-bold uppercase">Safety Log</span>
+                    <span className="text-xs font-bold uppercase tracking-wider">Security & Safety Log</span>
                   </div>
-                  <p className="text-gray-300 text-sm leading-relaxed">
-                    {result.domain_status}
-                  </p>
+                  
+                  <div className="flex items-start gap-3 bg-black/40 p-4 rounded-md border border-white/5">
+                    {result.domain_status.toLowerCase().includes("detected") || result.domain_status.toLowerCase().includes("warning") || result.domain_status.toLowerCase().includes("🚩") ? (
+                        <AlertTriangle className="w-6 h-6 text-red-500 shrink-0 mt-0.5 animate-pulse" />
+                    ) : (
+                        <CheckCircle className="w-6 h-6 text-green-500 shrink-0 mt-0.5" />
+                    )}
+                    <p className="text-sm font-medium leading-relaxed font-mono">
+                      {result.domain_status.split('|').map((line, idx) => (
+                        <span key={idx} className="block mb-1">{line.trim()}</span>
+                      ))}
+                    </p>
+                  </div>
                 </div>
               </div>
             </div>

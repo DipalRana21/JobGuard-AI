@@ -14,6 +14,14 @@ from collections import Counter
 import hashlib
 import random
 from datetime import datetime
+import redis
+import json
+import uuid
+
+# Connect to the local Redis server
+# decode_responses=True ensures we get normal strings back instead of byte-strings
+cache = redis.Redis(host='localhost', port=6379, decode_responses=True)
+CACHE_EXPIRATION_SECONDS = 86400  # Cache reports for 24 hours (60 * 60 * 24)
 
 # Legit companies don't hire on these.
 SUSPICIOUS_HOSTS = [
@@ -113,48 +121,70 @@ def clean_text_advanced(text):
     return " ".join(cleaned_words)
 
 # --- DOMAIN CHECKER (Keep this as is) ---
-def get_domain_age(url):
-    try:
-        if not url.startswith("http"):
-            url = "http://" + url
-        parsed_domain = urlparse(url).netloc
-        if parsed_domain.startswith("www."):
-            parsed_domain = parsed_domain[4:]
+def check_domain(url, company_name):
+    domain_to_check = None
+    
+    # 1. URL Parsing (Bulletproofed)
+    if url:
+        url = url.strip()
+        # Force a scheme so urlparse doesn't get confused
+        if not url.startswith(('http://', 'https://')):
+            url = 'http://' + url
+        parsed = urlparse(url)
+        domain_to_check = parsed.netloc
+        # Strip "www." because WHOIS hates subdomains
+        if domain_to_check.startswith('www.'):
+            domain_to_check = domain_to_check[4:]
             
-        domain_info = whois.whois(parsed_domain)
+    # 2. Guesser (Smarter Fallback)
+    elif company_name:
+        clean_name = company_name.lower()
+        # Strip out corporate jargon to find the real domain
+        for suffix in [' ltd', ' inc', ' llc', ' pvt', ' private', ' limited']:
+            clean_name = clean_name.replace(suffix, '')
+        domain_to_check = f"{clean_name.replace(' ', '')}.com"
+        
+    if not domain_to_check:
+        return "No URL or Company provided for scan.", "N/A"
+
+    # 3. WHOIS Lookup & Timezone Fix
+    try:
+        domain_info = whois.whois(domain_to_check)
         creation_date = domain_info.creation_date
         
-        if isinstance(creation_date, list):
-            creation_date = creation_date[0]
         if not creation_date:
-            return "Unknown"
-        if creation_date.tzinfo is not None:
-            creation_date = creation_date.replace(tzinfo=None)
+            return f"No WHOIS record found for {domain_to_check}.", "N/A"
+        
+        if type(creation_date) is list:
+            creation_date = creation_date[0]
             
-        age_days = (datetime.now() - creation_date).days
-        return age_days
-    except:
-        return "Error"
+        # THE MAGIC FIX: Strip timezones before doing the math!
+        if isinstance(creation_date, datetime):
+            creation_date = creation_date.replace(tzinfo=None) # Forces it to be naive
+            age_days = (datetime.now() - creation_date).days
+            return f"Domain {domain_to_check} analyzed.", age_days
+        else:
+            return f"Domain {domain_to_check} analyzed (Unknown date format).", "N/A"
+            
+    except Exception as e:
+        # This will now print the EXACT error in your terminal if it ever fails again
+        print(f"🛑 WHOIS CRASH for {domain_to_check}: {e}")
+        return f"Whois lookup failed for {domain_to_check}.", "N/A"
     
 # --- UPDATED OSINT ENGINE (Captures Evidence for Report) ---
 def digital_footprint_scan(company_name):
     if not company_name or len(company_name) < 2:
-        return {"score": 0, "status": "Not Analyzed", "sources": []}
+        return {"score": 50, "status": "Not Analyzed", "sources": []}
 
-    print(f"🔎 Scanning DuckDuckGo for: {company_name}...")
-    
-    query_zauba = f"site:zaubacorp.com {company_name}" 
-    query_linkedin = f"site:linkedin.com {company_name}" 
-
-    # We will store "Evidence" here to show in the Modal
+    print(f"🔎 Scanning Corporate Registries for: {company_name}...")
     evidence = []
     found_zauba = False
     found_linkedin = False
     
+    # 1. INDEPENDENT ZAUBA SEARCH
     try:
         with DDGS() as ddgs:
-            # Fetch Zauba Result
-            r_zauba = list(ddgs.text(query_zauba, max_results=1))
+            r_zauba = list(ddgs.text(f"site:zaubacorp.com {company_name}", max_results=1))
             if r_zauba:
                 found_zauba = True
                 evidence.append({
@@ -163,9 +193,13 @@ def digital_footprint_scan(company_name):
                     "url": r_zauba[0]['href'],
                     "icon": "building"
                 })
+    except Exception as e:
+        print(f"⚠️ Zauba Rate Limit / Error: {e}")
 
-            # Fetch LinkedIn Result
-            r_linkedin = list(ddgs.text(query_linkedin, max_results=1))
+    # 2. INDEPENDENT LINKEDIN SEARCH
+    try:
+        with DDGS() as ddgs:
+            r_linkedin = list(ddgs.text(f"site:linkedin.com {company_name}", max_results=1))
             if r_linkedin:
                 found_linkedin = True
                 evidence.append({
@@ -174,10 +208,8 @@ def digital_footprint_scan(company_name):
                     "url": r_linkedin[0]['href'],
                     "icon": "briefcase"
                 })
-
     except Exception as e:
-        print(f"⚠️ Search Error: {e}")
-        return {"score": 50, "status": "Search Error", "sources": []}
+        print(f"⚠️ LinkedIn Rate Limit / Error: {e}")
 
     # --- SCORING ---
     trust_score = 50
@@ -187,7 +219,6 @@ def digital_footprint_scan(company_name):
     if found_linkedin: trust_score += 20
     else: trust_score -= 10
 
-    # Verdict
     if trust_score >= 80: status = "Verified Entity"
     elif trust_score >= 60: status = "Likely Legitimate"
     elif trust_score >= 40: status = "Unverified Startup"
@@ -196,9 +227,8 @@ def digital_footprint_scan(company_name):
     return {
         "score": trust_score,
         "status": status,
-        "sources": evidence # <--- Sending the full evidence list now
+        "sources": evidence 
     }
-
 
 def extract_company_name(text):
     match = re.search(r"(?:at|to|join)\s+([A-Z][a-zA-Z0-9\s]{2,20})", text)
@@ -504,38 +534,178 @@ def deep_dive_analysis(company_name):
         "trust_score": int(avg_score),
         "total_reviews": len(mentions),
         "themes": themes,
-        "tech_stack": tech_stack, # <--- NEW
         "leadership": leadership, # <--- NEW
-        "interview_difficulty": difficulty_score, # <--- NEW
         "feed": mentions
     }
 
 # --- HELPER: LEADERSHIP FINDER ---
+# def find_leadership(company_name):
+#     # Tries to find the CEO/Founder via Search
+#     try:
+#         query = f"{company_name} CEO founder linkedin"
+#         with DDGS() as ddgs:
+#             results = list(ddgs.text(query, max_results=1))
+#             if results:
+#                 # Naive extraction: Just return the title and snippet
+#                 return {
+#                     "source_title": results[0]['title'], # e.g. "Saurabh Gupta - Founder - UrbanPiper"
+#                     "url": results[0]['href']
+#                 }
+#     except:
+#         return None
+#     return None
+
 def find_leadership(company_name):
     # Tries to find the CEO/Founder via Search
     try:
         query = f"{company_name} CEO founder linkedin"
         with DDGS() as ddgs:
-            results = list(ddgs.text(query, max_results=1))
+            # Grab top 3 results instead of just 1
+            results = list(ddgs.text(query, max_results=3))
+            
             if results:
-                # Naive extraction: Just return the title and snippet
+                for r in results:
+                    title = r['title']
+                    url = r['href']
+                    
+                    # UPGRADE: Ensure it is a human LinkedIn profile (ignores news articles)
+                    if "linkedin.com/in" in url.lower():
+                        # Clean the text: "Saurabh Gupta - Founder..." -> "Saurabh Gupta"
+                        clean_name = title.split('-')[0].split('|')[0].strip()
+                        
+                        # Make sure it didn't just grab the company name
+                        if company_name.lower() not in clean_name.lower() and len(clean_name) < 35:
+                            return {
+                                "source_title": clean_name,
+                                "url": url
+                            }
+                            
+                # FALLBACK: If the strict loop fails, use your exact original naive extraction
                 return {
-                    "source_title": results[0]['title'], # e.g. "Saurabh Gupta - Founder - UrbanPiper"
+                    "source_title": results[0]['title'],
                     "url": results[0]['href']
                 }
-    except:
+    except Exception as e:
+        print(f"Leadership error: {e}")
         return None
+        
     return None
 
+# def find_leadership(company_name):
+#     if not company_name:
+#         return None
+        
+#     print(f"🕵️‍♂️ Searching Leadership for: {company_name}...")
+#     try:
+#         with DDGS() as ddgs:
+#             # --- TIER 1: Instant Answers (For massive companies) ---
+#             try:
+#                 answers = list(ddgs.answers(f"CEO of {company_name}"))
+#                 if answers and answers[0].get('text'):
+#                     print(f"   -> ✅ Found via Instant Answers!")
+#                     return {
+#                         "source_title": answers[0]['text'],
+#                         "url": answers[0].get('url', f"https://duckduckgo.com/?q=CEO+of+{company_name.replace(' ', '+')}")
+#                     }
+#             except:
+#                 pass
+
+#             # --- TIER 2: Wikipedia Fallback (Catches companies like SpaceX) ---
+#             try:
+#                 wiki_results = list(ddgs.text(f"CEO of {company_name} wikipedia", max_results=3))
+#                 for r in wiki_results:
+#                     title = r.get('title', '')
+#                     url = r.get('href', '')
+                    
+#                     if "wikipedia.org/wiki/" in url.lower():
+#                         # Slices "Elon Musk - Wikipedia" -> "Elon Musk"
+#                         clean_name = re.split(r'\s*[-|–]\s*', title)[0].strip()
+                        
+#                         # Prevents grabbing the company's own Wikipedia page or random lists
+#                         if clean_name.lower() != company_name.lower() and "list" not in clean_name.lower() and len(clean_name) < 30:
+#                             print(f"   -> ✅ Found via Wikipedia: {clean_name}")
+#                             return {
+#                                 "source_title": clean_name,
+#                                 "url": url
+#                             }
+#             except:
+#                 pass
+
+#             # --- TIER 3: Strict LinkedIn (Catches Startups like UrbanPiper) ---
+#             try:
+#                 li_results = list(ddgs.text(f'"{company_name}" CEO site:linkedin.com/in', max_results=5))
+#                 for r in li_results:
+#                     title = r.get('title', '')
+#                     url = r.get('href', '')
+                    
+#                     if "linkedin.com/in" in url.lower():
+#                         clean_name = re.split(r'\s*[-|–]\s*', title)[0].strip()
+                        
+#                         forbidden_words = [
+#                             'ceo', 'founder', 'appoints', 'hiring', 'news', 
+#                             'profile', 'director', 'announces', company_name.lower()
+#                         ]
+                        
+#                         # Strict check: Are there any forbidden headline words?
+#                         is_human = not any(word in clean_name.lower() for word in forbidden_words)
+                        
+#                         if is_human and 0 < len(clean_name) <= 30:
+#                             print(f"   -> ✅ Found via LinkedIn: {clean_name}")
+#                             return {
+#                                 "source_title": clean_name,
+#                                 "url": url
+#                             }
+#             except:
+#                 pass
+                
+#     except Exception as e:
+#         print(f"⚠️ Leadership search error: {e}")
+#         return None
+        
+#     return None
+
 # --- NEW ROUTE FOR THE SEPARATE PAGE ---
+# @app.route('/report', methods=['POST'])
+# def generate_full_report():
+#     data = request.json
+#     company_name = data.get('company_name')
+    
+#     # Run the Deep Dive
+#     report_data = deep_dive_analysis(company_name)
+    
+#     return jsonify(report_data)
+
 @app.route('/report', methods=['POST'])
 def generate_full_report():
     data = request.json
     company_name = data.get('company_name')
-    
-    # Run the Deep Dive
+
+    if not company_name:
+        return jsonify({"error": "Company name is required"}), 400
+
+    # Create the cache key
+    cache_key = f"report:{company_name.lower().replace(' ', '')}"
+
+    # 1. REDIS CACHE HIT: Try to load from memory first
+    try:
+        cached_data = cache.get(cache_key)
+        if cached_data:
+            print(f"⚡ CACHE HIT: Returning instant report for {company_name}")
+            return jsonify(json.loads(cached_data))
+    except Exception as e:
+        print(f"⚠️ Redis Read Error: {e}")
+
+    # 2. CACHE MISS: Run your exact original deep dive
+    print(f"🐢 CACHE MISS: Generating fresh report for {company_name}...")
     report_data = deep_dive_analysis(company_name)
-    
+
+    # 3. Save the result to Redis (expires in 24 hours)
+    try:
+        cache.setex(cache_key, 86400, json.dumps(report_data))
+        print(f"💾 Saved {company_name} to Redis cache!")
+    except Exception as e:
+        print(f"⚠️ Redis Write Error: {e}")
+
     return jsonify(report_data)
 
 # --- API ENDPOINT ---
@@ -543,125 +713,101 @@ def generate_full_report():
 def predict():
     data = request.json
     job_text = data.get('text', '')
-    job_url = data.get('url', '')
+    job_url = data.get('url', '').strip()
 
-    # Optional: Allow user to send company_name explicitly from Frontend
-    company_name_input = data.get('company_name', '')
-    
-    # If not provided, try to extract from text
+    # 1. IDENTIFY THE COMPANY
+    company_name_input = data.get('company_name', '').strip()
     extracted_name = extract_company_name(job_text)
     final_company_name = company_name_input if company_name_input else extracted_name
 
-    # --- 1. GIBBERISH CHECK (New!) ---
+    # 2. GIBBERISH CHECK
     if len(job_text) < MIN_TEXT_LENGTH:
         return jsonify({
             "prediction": "Unknown",
             "risk_score": 0,
-            "domain_status": "Error: Text too short to analyze. Please provide details.",
+            "domain_status": "⚠️ Error: Text too short to analyze. Please provide details.",
             "domain_age_days": "N/A"
         })
 
-    # --- 2. CLEANING & ML PREDICTION ---
+    # 3. DOMAIN CHECK (Clean & Direct)
+    domain_status_msg, domain_age = check_domain(job_url, final_company_name)
+
+    # 4. ML PREDICTION (Base Score)
     cleaned_text = clean_text_advanced(job_text)
     vectorized_text = tfidf.transform([cleaned_text])
     probabilities = model.predict_proba(vectorized_text)[0]
-    confidence_of_fake = probabilities[1]
+    risk_score = int(probabilities[1] * 100)
     
-    # --- 3. DOMAIN ANALYSIS ---
-    domain_age = get_domain_age(job_url)
-    domain_status = "Safe Domain"
+    reasons = [] # This will populate your UI Safety Log
+
+    # 5. THE RULES ENGINE (Heuristics & Penalties)
     
-    # --- 4. BASE RISK SCORE ---
-    risk_score = int(confidence_of_fake * 100)
-    prediction_label = "Real" # Default
-    reasons = []
-
-    # --- 5. THE "RULES ENGINE" (Applying all logic) ---
-
-    # A. POISON PILL (Money Traps)
+    # A. Money Traps (Telegram, WhatsApp, Checks)
     money_traps = check_money_traps(job_text)
     if money_traps:
-        risk_score += 50
-        reasons.append(f"Money demands detected ({', '.join(money_traps)})")
+        risk_score += 40
+        reasons.append(f"🚩 High-Risk Demands: {', '.join(money_traps)}")
 
-    # B2. HYPE DETECTOR (Catching "Weekly Income" / "Easy Money")
+    # B. Hype Words
     hype_warnings = check_hype_words(job_text)
     if hype_warnings:
-        risk_score += 25  
-        reasons.append(f"Suspicious Hype ({', '.join(hype_warnings)})")
+        risk_score += 20  
+        reasons.append(f"🚩 Suspicious Hype: {', '.join(hype_warnings)}")
 
-    # B. HOSTILE HOSTING (Google Forms, Bit.ly) - NEW!
-    host_warning = check_suspicious_hosts(job_url)
-    if host_warning:
-        # CHECK: Is the text written professionally?
-        # If ML Model is very confident it's Real (Risk < 20%), we are lenient.
-        if risk_score < 35:
-            risk_score += 10  # Small penalty. 
-            reasons.append(f"Note: Application uses public hosting ({host_warning.split('(')[1]})")
-        else:
-            risk_score += 30  # Heavy penalty.
-            reasons.append(host_warning)
+    # C. Hostile Hosting (Google Forms, Bit.ly)
+    if job_url:
+        host_warning = check_suspicious_hosts(job_url)
+        if host_warning:
+            risk_score += 25
+            reasons.append(f"🚩 {host_warning}")
 
-    # . DIGITAL FOOTPRINT SCAN (The New Feature)
-    company_report = {"status": "Skipped", "details": [], "score": 50}
+    # D. New Domain Penalty
+    if isinstance(domain_age, int) and domain_age < 30:
+        risk_score += 30
+        reasons.append(f"🚩 Extremely New Domain ({domain_age} days old)")
+
+    # 6. DIGITAL FOOTPRINT SCAN (OSINT)
+    company_report = {"status": "Not Analyzed", "details": [], "score": 50}
     sentiment_report = None
 
     if final_company_name:
         company_report = digital_footprint_scan(final_company_name)
-
         sentiment_report = analyze_community_sentiment(final_company_name)
-        if company_report['score'] >= 80: risk_score = max(0, risk_score - 30)
-        elif company_report['score'] < 40: risk_score += 20
-
-        if sentiment_report and sentiment_report['average_score'] < 30:
-            risk_score += 20
-
-       
-
-    # C. BRAND MISMATCH (Kaggle vs kagg.com)
-    if job_url and "example.com" not in job_url:
-        domain_age = get_domain_age(job_url)
         
-        # Check Brand Mismatch ONLY if we have a real URL
-        brand_warning = check_brand_mismatch(job_text, job_url)
-        if brand_warning:
-            risk_score = 100
-            domain_status = brand_warning
-        elif isinstance(domain_age, int) and domain_age < 30:
-            risk_score += 50
-            domain_status = f"New Domain ({domain_age} days)"
-        else:
-            domain_status = "Safe Domain"
+        # Only reward the score if the domain is also old/trusted (prevents scammers from using real company names)
+        if company_report.get('score', 0) >= 80 and (isinstance(domain_age, int) and domain_age > 365):
+            risk_score = max(0, risk_score - 20)
+            reasons.append("🛡️ Verified established corporate entity.")
+        elif company_report.get('score', 0) < 40:
+            risk_score += 15
+            reasons.append("🚩 Poor digital footprint detected.")
 
-    # D. NEW DOMAIN CHECK
-    if isinstance(domain_age, int) and domain_age < 30:
+        if sentiment_report and sentiment_report.get('average_score', 100) < 40:
+            risk_score += 15
+            reasons.append("🚩 Toxic community sentiment found.")
+
+    # 7. FINAL CLAMPING & TRAFFIC LIGHT
+    if risk_score > 99: 
         risk_score = 99
-        reasons.append(f"New Domain ({domain_age} days old)")
 
-    # --- 6. FINAL CLAMPING & TRAFFIC LIGHT ---
-    if risk_score > 100: risk_score = 100
-
-    # Traffic Light Logic
     if risk_score > 60:
         prediction_label = "Fake"
     elif risk_score > 40:
         prediction_label = "Suspicious"
+    else:
+        prediction_label = "Real"
     
-    # If we have specific reasons (like Money/Brand), append them to status
-    if reasons:
-        domain_status = " | ".join(reasons)
+    # Format the final safety log for the UI
+    final_domain_status = " | ".join(reasons) if reasons else "✅ Safe Domain. No immediate red flags detected."
 
-    # --- 7. SEND RESPONSE ---
-    result = {
+    return jsonify({
         "prediction": prediction_label,
         "risk_score": risk_score,
-        "domain_status": domain_status,
+        "domain_status": final_domain_status,
         "domain_age_days": domain_age,
         "company_analysis": company_report,
         "sentiment_analysis": sentiment_report
-    }
-    
-    return jsonify(result)
+    })
 
 if __name__ == '__main__':
     app.run(port=5000, debug=True)

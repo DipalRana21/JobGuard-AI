@@ -162,9 +162,6 @@ run_test("Naturally Ambiguous (Vague Job)", text_9, "unknown-job-board.xyz", "Su
 # Location: Bangalore (On-site)
 # Stipend: ₹35,000 per month
 
-# About Us:
-# UrbanPiper is building a platform to help restaurants manage their online presence. We are backed by Swiggy and Zomato. We are looking for passionate engineers to join our backend team.
-
 # Responsibilities:
 # - Work on Python and Django to build scalable APIs.
 # - Collaborate with the frontend team to integrate user-facing elements.
@@ -183,4 +180,4 @@ run_test("Naturally Ambiguous (Vague Job)", text_9, "unknown-job-board.xyz", "Su
 # 3. HR Discussion.
 
 # How to Apply:
-# Send your resume to careers@urbanpiper.com or apply via our LinkedIn page.
+# apply via our LinkedIn page.

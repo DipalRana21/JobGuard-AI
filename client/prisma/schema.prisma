@@ -55,7 +55,7 @@ model ScanReport {
   id            String   @id @default(cuid())
   reportId      String   @unique // The "REP-URB-2026..." ID
   companyName   String
-  trustScore    Int
+  riskScore    Int
   status        String
   createdAt     DateTime @default(now())
   
