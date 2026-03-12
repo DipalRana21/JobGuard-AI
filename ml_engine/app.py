@@ -1,4 +1,5 @@
 import os
+import threading
 from dotenv import load_dotenv
 from flask import Flask, request, jsonify
 from flask_cors import CORS
@@ -21,6 +22,7 @@ import json
 import time
 import requests
 from google import genai
+from flask_socketio import SocketIO
 
 load_dotenv()
 
@@ -90,6 +92,10 @@ except LookupError:
 # Initialize App & Tools
 app = Flask(__name__)
 CORS(app)
+
+# async_mode='threading' prevents the Werkzeug "write() before start_response" crash!
+socketio = SocketIO(app, cors_allowed_origins="*", async_mode='threading')
+
 lemmatizer = WordNetLemmatizer()
 stop_words = set(stopwords.words('english'))
 
@@ -800,16 +806,25 @@ def generate_executive_summary(report_data, max_retries=3):
         
     return f"{fallback_s1} {fallback_s2} {directive}"
 
-# --- NEW ROUTE FOR THE SEPARATE PAGE ---
-# @app.route('/report', methods=['POST'])
-# def generate_full_report():
-#     data = request.json
-#     company_name = data.get('company_name')
+# 🚀 THE LIGHTNING RADAR ROUTE
+@app.route('/radar', methods=['POST'])
+def trigger_radar():
+    data = request.json
+    # .strip() removes accidental blank spaces
+    company_name = data.get('company_name', '').strip()
     
-#     # Run the Deep Dive
-#     report_data = deep_dive_analysis(company_name)
-    
-#     return jsonify(report_data)
+    # 🛑 THE SPAM FILTER 🛑
+    # If the frontend accidentally sends a blank search, ignore it completely!
+    if not company_name:
+        return jsonify({"error": "Blank search ignored"}), 400
+        
+    print(f"📢 [RADAR] Broadcasting active scan for: {company_name}")
+    try:
+        socketio.emit('live_scan_feed', {'company_name': company_name})
+        return jsonify({"status": "broadcast_success"}), 200
+    except Exception as e:
+        print(f"❌ [RADAR] Error: {e}")
+        return jsonify({"error": str(e)}), 500
 
 @app.route('/report', methods=['POST'])
 def generate_full_report():
@@ -819,10 +834,9 @@ def generate_full_report():
     if not company_name:
         return jsonify({"error": "Company name is required"}), 400
 
-    # Create the cache key
     cache_key = f"report:{company_name.lower().replace(' ', '')}"
 
-    # 1. REDIS CACHE HIT: Try to load from memory first
+    # 1. REDIS CACHE HIT
     try:
         cached_data = cache.get(cache_key)
         if cached_data:
@@ -831,15 +845,14 @@ def generate_full_report():
     except Exception as e:
         print(f"⚠️ Redis Read Error: {e}")
 
-    # 2. CACHE MISS: Run your exact original deep dive
+    # 2. CACHE MISS: Run the deep dive
     print(f"🐢 CACHE MISS: Generating fresh report for {company_name}...")
     report_data = deep_dive_analysis(company_name)
 
     print("🧠 Generating AI Executive Briefing...")
-    # This adds a new 'ai_summary' field to your dictionary
     report_data['ai_summary'] = generate_executive_summary(report_data)
 
-    # 3. Save the result to Redis (expires in 24 hours)
+    # 3. Save to Redis
     try:
         cache.setex(cache_key, 86400, json.dumps(report_data))
         print(f"💾 Saved {company_name} to Redis cache!")
@@ -949,5 +962,21 @@ def predict():
         "sentiment_analysis": sentiment_report
     })
 
+
+# 🚨 DIAGNOSTIC TRIPWIRE ROUTE 🚨
+@app.route('/test-socket', methods=['GET'])
+def test_socket():
+    print("\n📢 [DIAGNOSTIC] Manual socket trigger hit!")
+    try:
+        # Force a broadcast to all connected browsers
+        socketio.emit('live_scan_feed', {'company_name': 'DIAGNOSTIC_TEST_CORP'})
+        print("📢 [DIAGNOSTIC] Emit successful from Python!")
+        return "Broadcast sent! Check your React browser console.", 200
+    except Exception as e:
+        print(f"❌ [DIAGNOSTIC] Emit FAILED: {e}")
+        return f"Error: {e}", 500
+
 if __name__ == '__main__':
-    app.run(port=5000, debug=True)
+    print("🚀 Nexus-CISO WebSocket Server Online...")
+    # Notice we use socketio.run instead of app.run now!
+    socketio.run(app, debug=True, port=5000, host="0.0.0.0", allow_unsafe_werkzeug=True)
