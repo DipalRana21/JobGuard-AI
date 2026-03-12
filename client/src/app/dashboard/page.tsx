@@ -4,9 +4,9 @@ import { useSession, signOut } from "next-auth/react";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import axios from "axios";
-import { 
-  Shield, LayoutDashboard, History, Settings, LogOut, 
-  Search, Activity, AlertTriangle, FileText, Plus 
+import {
+  Shield, LayoutDashboard, History, Settings, LogOut,
+  Search, Activity, AlertTriangle, FileText, Plus
 } from "lucide-react";
 import Link from "next/link";
 import Image from "next/image";
@@ -20,7 +20,7 @@ export default function DashboardPage() {
   const [loadingScans, setLoadingScans] = useState(true);
 
   useEffect(() => {
-    if(status === "authenticated") {
+    if (status === "authenticated") {
       const fetchHistory = async () => {
         try {
           const res = await axios.get("/api/scans");
@@ -28,7 +28,7 @@ export default function DashboardPage() {
         } catch (error) {
           console.error("Error loading history", error);
         }
-        finally{
+        finally {
           setLoadingScans(false);
         }
       };
@@ -61,49 +61,62 @@ export default function DashboardPage() {
   if (!session) return null;
 
   return (
-    <div className="min-h-screen bg-[#0f172a] text-white flex font-sans">
-      
+    <div className="min-h-screen bg-[#0b1220] text-white flex font-sans relative overflow-hidden">
+
+      {/* Background Lighting System */}
+      <div className="absolute -top-40 -left-40 w-[600px] h-[600px] bg-blue-600/20 blur-[160px] rounded-full animate-pulse pointer-events-none" />
+      <div className="absolute -bottom-40 -right-40 w-[600px] h-[600px] bg-purple-600/20 blur-[160px] rounded-full animate-pulse pointer-events-none" />
+      <div className="absolute inset-0 bg-[radial-gradient(circle_at_top,rgba(59,130,246,0.08),transparent_60%)] pointer-events-none" />
+
       {/* --- SIDEBAR --- */}
-      <aside className="w-64 border-r border-white/10 bg-white/5 p-6 flex flex-col justify-between hidden md:flex backdrop-blur-xl">
+      <aside className="w-72 border-r border-white/10 bg-gradient-to-b from-[#111827]/90 to-[#0f172a]/90 backdrop-blur-2xl p-8 flex flex-col justify-between hidden md:flex shadow-xl">
+
         <div>
-          <Link href="/" className="flex items-center gap-3 mb-12 group">
-            <div className="p-2 bg-gradient-to-br from-blue-500 to-purple-600 rounded-lg shadow-lg shadow-blue-500/20 group-hover:shadow-blue-500/40 transition-all">
-              <Shield className="w-6 h-6 text-white" />
+          <Link href="/" className="flex items-center gap-4 mb-14 group">
+            <div className="relative">
+              <div className="absolute inset-0 bg-blue-500/30 blur-xl rounded-xl group-hover:opacity-100 opacity-60 transition" />
+              <div className="relative p-3 bg-gradient-to-br from-blue-500 to-purple-600 rounded-xl shadow-lg">
+                <Shield className="w-7 h-7 text-white" />
+              </div>
             </div>
-            <span className="text-xl font-black tracking-tight">JobGuard</span>
+            <span className="text-2xl font-black tracking-tight">JobGuard</span>
           </Link>
 
-          <nav className="space-y-2">
-            <button className="w-full flex items-center gap-3 px-4 py-3 bg-blue-500/10 text-blue-400 rounded-xl font-bold transition-all border border-blue-500/20">
+          <nav className="space-y-3">
+            <button className="w-full flex items-center gap-3 px-5 py-3 bg-blue-500/10 text-blue-400 rounded-xl font-semibold border border-blue-500/20">
               <LayoutDashboard className="w-5 h-5" /> Overview
             </button>
-            <button className="w-full flex items-center gap-3 px-4 py-3 text-gray-400 hover:text-white hover:bg-white/5 rounded-xl font-medium transition-all">
+
+            <button className="w-full flex items-center gap-3 px-5 py-3 text-gray-400 hover:text-white hover:bg-white/5 rounded-xl font-medium transition-all">
               <History className="w-5 h-5" /> Scan History
             </button>
-            <button className="w-full flex items-center gap-3 px-4 py-3 text-gray-400 hover:text-white hover:bg-white/5 rounded-xl font-medium transition-all">
+
+            <button className="w-full flex items-center gap-3 px-5 py-3 text-gray-400 hover:text-white hover:bg-white/5 rounded-xl font-medium transition-all">
               <Settings className="w-5 h-5" /> Settings
+            </button>
+
+            <button
+              onClick={() => signOut({ callbackUrl: "/login" })}
+              className="w-full flex items-center gap-3 px-5 py-3 text-red-400 hover:bg-red-500/10 rounded-xl font-medium transition-all"
+            >
+              <LogOut className="w-5 h-5" /> Sign Out
             </button>
           </nav>
         </div>
 
-        <button 
-          onClick={() => signOut({ callbackUrl: "/login" })}
-          className="w-full flex items-center gap-3 px-4 py-3 text-red-400 hover:text-red-300 hover:bg-red-500/10 rounded-xl font-medium transition-all mt-auto"
-        >
-          <LogOut className="w-5 h-5" /> Sign Out
-        </button>
+
       </aside>
 
       {/* --- MAIN CONTENT --- */}
       <main className="flex-1 p-8 md:p-12 overflow-y-auto">
-        
+
         {/* TOP NAV / USER PROFILE */}
         <header className="flex justify-between items-center mb-12">
           <div className="relative w-full max-w-md hidden md:block">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-500" />
-            <input 
-              type="text" 
-              placeholder="Search past intelligence reports..." 
+            <input
+              type="text"
+              placeholder="Search past intelligence reports..."
               className="w-full bg-white/5 border border-white/10 rounded-full py-2.5 pl-10 pr-4 text-sm text-white focus:outline-none focus:border-blue-500/50 transition-colors"
             />
           </div>
@@ -114,11 +127,11 @@ export default function DashboardPage() {
               <p className="text-xs text-gray-400">{session.user?.email}</p>
             </div>
             {session.user?.image ? (
-              <Image 
-                src={session.user.image} 
-                alt="Profile" 
-                width={48} 
-                height={48} 
+              <Image
+                src={session.user.image}
+                alt="Profile"
+                width={48}
+                height={48}
                 className="rounded-full border-2 border-white/10 shadow-lg"
               />
             ) : (
@@ -131,44 +144,103 @@ export default function DashboardPage() {
 
         {/* WELCOME SECTION */}
         <div className="mb-10">
-          <h1 className="text-3xl font-black mb-2">Welcome back, {session.user?.name?.split(" ")[0]}</h1>
-          <p className="text-gray-400">Here is your digital forensics overview for today.</p>
+          <h1 className="text-4xl font-black mb-3 tracking-tight">
+            Welcome back, {session.user?.name?.split(" ")[0]}
+          </h1>
+
+          <p className="text-gray-400 text-base">
+            Your AI-driven digital forensics overview.
+          </p>
+
         </div>
 
         {/* QUICK STATS CARDS */}
-        
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-12">
-          <div className="bg-white/5 border border-white/10 p-6 rounded-2xl relative overflow-hidden group">
-            <div className="absolute top-0 right-0 w-24 h-24 bg-blue-500/10 rounded-full blur-2xl -translate-y-1/2 translate-x-1/2" />
-            <div className="flex justify-between items-start mb-4">
-              <div className="p-3 bg-blue-500/20 rounded-xl text-blue-400"><Activity className="w-6 h-6" /></div>
+
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-10 mb-16">
+
+          {/* ===== TOTAL SCANS ===== */}
+          <div className="relative group h-full">
+
+            {/* Glow Layer */}
+            <div className="absolute inset-0 bg-blue-600/10 blur-2xl opacity-0 group-hover:opacity-100 transition duration-500 rounded-3xl" />
+
+            <div className="relative bg-gradient-to-br from-[#0f172a] to-[#111827] p-10 rounded-3xl border border-blue-500/20 hover:border-blue-400/50 transition-all duration-300 shadow-[0_0_40px_rgba(59,130,246,0.08)] hover:-translate-y-1 h-full flex flex-col justify-between">
+
+              <div className="flex items-center justify-between mb-8">
+                <div className="p-4 bg-blue-500/15 rounded-2xl border border-blue-500/20">
+                  <Activity className="w-7 h-7 text-blue-400" />
+                </div>
+              </div>
+
+              <div>
+                <h3 className="text-5xl font-extrabold tracking-tight text-white mb-3">
+                  {scans.length}
+                </h3>
+                <p className="text-lg text-gray-400 leading-relaxed">
+                  Total Companies Scanned
+                </p>
+              </div>
+
             </div>
-            <h3 className="text-3xl font-black text-white mb-1">{scans.length}</h3>
-            <p className="text-sm text-gray-400 font-medium">Total Companies Scanned</p>
           </div>
 
-          <div className="bg-white/5 border border-white/10 p-6 rounded-2xl relative overflow-hidden">
-            <div className="absolute top-0 right-0 w-24 h-24 bg-red-500/10 rounded-full blur-2xl -translate-y-1/2 translate-x-1/2" />
-            <div className="flex justify-between items-start mb-4">
-              <div className="p-3 bg-red-500/20 rounded-xl text-red-400"><AlertTriangle className="w-6 h-6" /></div>
+
+          {/* ===== CRITICAL THREATS ===== */}
+          <div className="relative group h-full">
+
+            <div className="absolute inset-0 bg-red-600/10 blur-2xl opacity-0 group-hover:opacity-100 transition duration-500 rounded-3xl" />
+
+            <div className="relative bg-gradient-to-br from-[#0f172a] to-[#111827] p-10 rounded-3xl border border-red-500/20 hover:border-red-400/50 transition-all duration-300 shadow-[0_0_40px_rgba(239,68,68,0.08)] hover:-translate-y-1 h-full flex flex-col justify-between">
+
+              <div className="flex items-center justify-between mb-8">
+                <div className="p-4 bg-red-500/15 rounded-2xl border border-red-500/20">
+                  <AlertTriangle className="w-7 h-7 text-red-400" />
+                </div>
+              </div>
+
+              <div>
+                <h3 className="text-5xl font-extrabold tracking-tight text-white mb-3">
+                  0
+                </h3>
+                <p className="text-lg text-gray-400 leading-relaxed">
+                  Critical Threats Found
+                </p>
+              </div>
+
             </div>
-            <h3 className="text-3xl font-black text-white mb-1">0</h3>
-            <p className="text-sm text-gray-400 font-medium">Critical Threats Found</p>
           </div>
 
-          <div className="bg-gradient-to-br from-blue-600 to-purple-700 border border-white/10 p-6 rounded-2xl flex flex-col justify-center items-center text-center hover:opacity-90 transition-opacity cursor-pointer shadow-xl shadow-blue-500/20">
-            <Plus className="w-10 h-10 text-white mb-2" />
-            <h3 className="text-lg font-bold text-white">New Scan</h3>
-            <p className="text-xs text-blue-200 mt-1">Initialize a new investigation</p>
-          </div>
+
+          {/* ===== NEW SCAN ===== */}
+          <Link
+            href="/"
+            className="relative group h-full"
+          >
+
+            <div className="absolute inset-0 bg-gradient-to-r from-blue-600/20 to-purple-600/20 blur-2xl opacity-70 group-hover:opacity-100 transition duration-500 rounded-3xl" />
+
+            <div className="relative bg-gradient-to-br from-blue-600 to-purple-700 p-10 rounded-3xl border border-white/10 transition-all duration-300 shadow-[0_0_50px_rgba(99,102,241,0.25)] hover:-translate-y-1 h-full flex flex-col items-center justify-center text-center">
+
+              <Plus className="w-12 h-12 text-white mb-5 opacity-90 group-hover:scale-110 transition-transform duration-300" />
+
+              <h3 className="text-2xl font-bold text-white mb-2">
+                New Scan
+              </h3>
+
+              <p className="text-base text-blue-200">
+                Initialize Investigation
+              </p>
+
+            </div>
+          </Link>
+
         </div>
-
         {/* RECENT ACTIVITY */}
         <div>
           <h2 className="text-xl font-bold mb-6 flex items-center gap-2">
             <History className="w-5 h-5 text-gray-400" /> Recent Intelligence Reports
           </h2>
-          
+
           {loadingScans ? (
             <div className="flex justify-center p-12">
               <div className="w-8 h-8 border-4 border-blue-500 border-t-transparent rounded-full animate-spin" />
@@ -187,32 +259,45 @@ export default function DashboardPage() {
           ) : (
             <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
               {scans.map((scan) => (
-                <Link 
-                  href={`/report/${encodeURIComponent(scan.companyName)}`} 
+                <Link
+                  href={`/report/${encodeURIComponent(scan.companyName)}`}
                   key={scan.id}
-                  className="bg-white/5 border border-white/10 p-6 rounded-2xl hover:border-white/20 hover:bg-white/10 transition-all group relative overflow-hidden"
+                  className="relative group p-[1px] rounded-2xl bg-gradient-to-br from-white/10 to-transparent"
                 >
-                  <div className={`absolute top-0 right-0 w-16 h-16 rounded-full blur-2xl -translate-y-1/2 translate-x-1/2 ${
-                    scan.status === "Safe" ? "bg-green-500/20" : 
-                    scan.status === "Warning" ? "bg-orange-500/20" : "bg-red-500/20"
-                  }`} />
-                  
-                  <div className="flex justify-between items-start mb-4">
-                    <span className="text-xs font-mono text-gray-500">{new Date(scan.createdAt).toLocaleDateString()}</span>
-                    <span className={`text-xs font-bold px-2 py-1 rounded border uppercase tracking-wider ${
-                      scan.status === "Safe" ? "bg-green-500/10 text-green-400 border-green-500/20" :
-                      scan.status === "Warning" ? "bg-orange-500/10 text-orange-400 border-orange-500/20" :
-                      "bg-red-500/10 text-red-400 border-red-500/20"
-                    }`}>
-                      {scan.status}
-                    </span>
-                  </div>
-                  <h3 className="text-xl font-bold text-white mb-1 group-hover:text-blue-400 transition-colors">
-                    {scan.companyName}
-                  </h3>
-                  <div className="flex items-end gap-2 mt-4">
-                    <span className="text-3xl font-black text-white">{scan.riskScore}</span>
-                    <span className="text-sm text-gray-500 mb-1">Risk Score</span>
+                  <div className="bg-[#111827]/95 p-8 rounded-2xl border border-white/10 hover:border-blue-500/40 transition-all shadow-lg hover:-translate-y-1 overflow-hidden">
+
+                    {/* Risk glow */}
+                    <div className={`absolute -top-10 -right-10 w-40 h-40 blur-3xl opacity-20 ${scan.riskScore < 30 ? "bg-green-500" :
+                      scan.riskScore < 70 ? "bg-yellow-500" :
+                        "bg-red-500"
+                      }`} />
+
+                    <div className="flex justify-between mb-6 text-sm">
+                      <span className="text-gray-500">
+                        {new Date(scan.createdAt).toLocaleDateString()}
+                      </span>
+
+                      <span className={`px-3 py-1 rounded-full text-xs font-semibold uppercase tracking-wider ${scan.riskScore < 30 ? "bg-green-500/10 text-green-400" :
+                        scan.riskScore < 70 ? "bg-yellow-500/10 text-yellow-400" :
+                          "bg-red-500/10 text-red-400"
+                        }`}>
+                        {scan.status}
+                      </span>
+                    </div>
+
+                    <h3 className="text-2xl font-bold text-white mb-4 group-hover:text-blue-400 transition-colors">
+                      {scan.companyName}
+                    </h3>
+
+                    <div className="flex items-end gap-3">
+                      <span className="text-5xl font-black text-white">
+                        {scan.riskScore}
+                      </span>
+                      <span className="text-base text-gray-400 mb-2">
+                        Risk Score
+                      </span>
+                    </div>
+
                   </div>
                 </Link>
               ))}

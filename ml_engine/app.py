@@ -1,3 +1,5 @@
+import os
+from dotenv import load_dotenv
 from flask import Flask, request, jsonify
 from flask_cors import CORS
 import joblib
@@ -16,7 +18,11 @@ import random
 from datetime import datetime
 import redis
 import json
-import uuid
+import time
+import requests
+from google import genai
+
+load_dotenv()
 
 # Connect to the local Redis server
 # decode_responses=True ensures we get normal strings back instead of byte-strings
@@ -464,41 +470,54 @@ def extract_tech_stack(text_blob):
 def deep_dive_analysis(company_name):
     print(f"🕵️‍♂️ Deep Dive Investigation for: {company_name}...")
     
-    # 1. SEARCH QUERIES
+    # 1. UPGRADED SEARCH QUERIES (Targeted explicitly at career discussions)
+    base_name = re.sub(r'\.(com|ai|cloud|io|net|co|org)$', '', company_name.lower()).strip()
+    
+    # 1. UPGRADED SEARCH QUERIES (Using base_name instead of full URL)
     search_queries = [
-        f"site:reddit.com {company_name} review",
-        f"site:glassdoor.co.in {company_name} reviews",
-        f"site:linkedin.com {company_name} about",
-        f"site:ambitionbox.com {company_name} reviews"
+        f'"{base_name}" "working at" site:reddit.com',
+        f'"{base_name}" interview site:reddit.com',
+        f'"{base_name}" reviews site:glassdoor.com',
+        f'"{base_name}" employee site:linkedin.com'
     ]
     
     mentions = []
     seen_titles = set()
     analyzer = SentimentIntensityAnalyzer()
     
-    # Big text blob for extraction
     full_text_blob = "" 
 
     try:
         with DDGS() as ddgs:
             for query in search_queries:
-                results = list(ddgs.text(query, max_results=4)) 
+                results = list(ddgs.text(query, max_results=5)) 
                 
                 for r in results:
                     title = r['title'].strip()
-                    if company_name.lower().replace(" ", "") not in title.lower().replace(" ", ""):
+                    body = r.get('body', '')
+                    title_snippet_lower = (title + " " + body).lower()
+
+                    # Check 1: Must contain the BASE brand name (not the full .ai URL)
+                    if base_name.replace(" ", "") not in title_snippet_lower.replace(" ", ""):
                         continue
+                        
+                    # 🚨 THE ULTIMATE CONTEXT FILTER 🚨
+                    employment_keywords = ['interview', 'salary', 'culture', 'job', 'employee', 'offer', 'working', 'manager', 'wlb', 'pay', 'workplace', 'hire', 'layoff', 'toxic']
+                    
+                    is_job_related = any(kw in title_snippet_lower for kw in employment_keywords)
+                    if not is_job_related:
+                        continue 
                         
                     if title.lower() in seen_titles: continue
                     seen_titles.add(title.lower())
                     
-                    full_text_blob += " " + r['body'] + " " + title
+                    full_text_blob += " " + body + " " + title
                     
-                    score = analyzer.polarity_scores(title + " " + r['body'])
+                    score = analyzer.polarity_scores(title + " " + body)
                     mentions.append({
                         "source": "Reddit" if "reddit" in r['href'] else "Glassdoor" if "glassdoor" in r['href'] else "LinkedIn" if "linkedin" in r['href'] else "Web",
                         "text": title,
-                        "snippet": r['body'][:150] + "...",
+                        "snippet": body[:150] + "...",
                         "url": r['href'],
                         "sentiment": "Negative" if score['compound'] < -0.05 else "Positive" if score['compound'] > 0.05 else "Neutral"
                     })
@@ -509,33 +528,86 @@ def deep_dive_analysis(company_name):
         print(f"Error: {e}")
 
     # 2. EXTRACT INSIGHTS
-    themes = extract_key_themes(mentions) # Use existing function
+    themes = extract_key_themes(mentions) 
     tech_stack = extract_tech_stack(full_text_blob)
     leadership = find_leadership(company_name)
     
-    # 3. INTERVIEW DIFFICULTY (Simple Keyword Math)
+    # 3. INTERVIEW DIFFICULTY 
     difficulty_keywords = ["hard", "difficult", "leetcode", "dsa", "complex", "tough"]
     easy_keywords = ["easy", "basic", "simple", "behavioral"]
     
     hard_count = sum(full_text_blob.lower().count(k) for k in difficulty_keywords)
     easy_count = sum(full_text_blob.lower().count(k) for k in easy_keywords)
     
-    # Avoid division by zero
     total_diff = hard_count + easy_count
-    difficulty_score = int((hard_count / total_diff * 100)) if total_diff > 0 else 50 # Default to Medium
+    difficulty_score = int((hard_count / total_diff * 100)) if total_diff > 0 else 50 
     
     # 4. FINAL SCORE
-    if not mentions: return {"status": "No Data", "score": 50}
-    avg_score = sum(m['sentiment'] == 'Positive' for m in mentions) / len(mentions) * 100
+    # 4. FINAL SCORE & DYNAMIC UI CALCULATIONS
+    if not mentions: 
+        print(f"⚠️ No employee reviews found for {company_name}. Generating Startup Profile.")
+        return {
+            "report_id": generate_report_id(company_name) if 'generate_report_id' in globals() else "REP-000", 
+            "company_name": company_name,
+            "trust_score": 50,
+            "total_reviews": 0,
+            "themes": [{"topic": "Insufficient Data", "mentions": 0}],
+            "leadership": leadership,
+            "feed": [],
+            "sentiment": {"positive": 0, "neutral": 100, "negative": 0},
+            "risk_breakdown": {"domain": 50, "leadership": 100 if leadership else 20, "sentiment": 50, "scam_signals": 100},
+            "risk_flags": ["Early-Stage Entity: No public employee discussions found."]
+        }
+
+    # Calculate real sentiment percentages
+    total_mentions = len(mentions)
+    pos_count = sum(1 for m in mentions if m['sentiment'] == 'Positive')
+    neu_count = sum(1 for m in mentions if m['sentiment'] == 'Neutral')
+    neg_count = sum(1 for m in mentions if m['sentiment'] == 'Negative')
+
+    sentiment_overview = {
+        "positive": int((pos_count / total_mentions) * 100),
+        "neutral": int((neu_count / total_mentions) * 100),
+        "negative": int((neg_count / total_mentions) * 100)
+    }
     
+    avg_score = int(((pos_count + (neu_count * 0.5)) / total_mentions) * 100)
+    
+    # Calculate Scam Signals
+    severe_keywords = ["scam", "fraud", "fake", "unpaid", "stolen", "lawsuit"]
+    scam_hits = sum(full_text_blob.lower().count(k) for k in severe_keywords)
+    scam_score = max(0, 100 - (scam_hits * 15))
+
+    # Generate Dynamic Risk Flags
+    risk_flags = []
+    if not leadership:
+        risk_flags.append("Leadership team is completely hidden or anonymous.")
+    if sentiment_overview["negative"] >= 30:
+        risk_flags.append(f"Elevated toxic community sentiment detected ({sentiment_overview['negative']}% Negative).")
+    if scam_hits > 2:
+        risk_flags.append(f"Warning: Detected {scam_hits} high-risk scam/fraud keywords in employee discussions.")
+
+    # Calculate real Risk Breakdown bars
+    risk_breakdown = {
+        "domain": 85, # Default to 85, can be hooked to WhoIs API later
+        "leadership": 100 if leadership else 20,
+        "sentiment": sentiment_overview["positive"] + int(sentiment_overview["neutral"] * 0.5),
+        "scam_signals": scam_score
+    }
+
     return {
-        "report_id": generate_report_id(company_name), # <--- NEW DYNAMIC ID
+        "report_id": generate_report_id(company_name) if 'generate_report_id' in globals() else "REP-123", 
         "company_name": company_name,
-        "trust_score": int(avg_score),
-        "total_reviews": len(mentions),
+        "trust_score": avg_score,
+        "total_reviews": total_mentions,
         "themes": themes,
-        "leadership": leadership, # <--- NEW
-        "feed": mentions
+        "leadership": leadership, 
+        "feed": mentions,
+        
+        # 👇 THESE ARE THE MISSING PIECES YOUR REACT UI IS BEGGING FOR 👇
+        "sentiment": sentiment_overview,
+        "risk_breakdown": risk_breakdown,
+        "risk_flags": risk_flags
     }
 
 # --- HELPER: LEADERSHIP FINDER ---
@@ -555,114 +627,178 @@ def deep_dive_analysis(company_name):
 #         return None
 #     return None
 
+# def find_leadership(company_name):
+#     # Tries to find the CEO/Founder via Search
+#     try:
+#         query = f"{company_name} CEO founder linkedin"
+#         with DDGS() as ddgs:
+#             # Grab top 3 results instead of just 1
+#             results = list(ddgs.text(query, max_results=3))
+            
+#             if results:
+#                 for r in results:
+#                     title = r['title']
+#                     url = r['href']
+                    
+#                     # UPGRADE: Ensure it is a human LinkedIn profile (ignores news articles)
+#                     if "linkedin.com/in" in url.lower():
+#                         # Clean the text: "Saurabh Gupta - Founder..." -> "Saurabh Gupta"
+#                         clean_name = title.split('-')[0].split('|')[0].strip()
+                        
+#                         # Make sure it didn't just grab the company name
+#                         if company_name.lower() not in clean_name.lower() and len(clean_name) < 35:
+#                             return {
+#                                 "source_title": clean_name,
+#                                 "url": url
+#                             }
+                            
+#                 # FALLBACK: If the strict loop fails, use your exact original naive extraction
+#                 return {
+#                     "source_title": results[0]['title'],
+#                     "url": results[0]['href']
+#                 }
+#     except Exception as e:
+#         print(f"Leadership error: {e}")
+#         return None
+        
+#     return None
+
 def find_leadership(company_name):
-    # Tries to find the CEO/Founder via Search
+    print(f"🕵️‍♂️ Searching Leadership for: {company_name}...")
+    if not company_name:
+        return None
+        
     try:
-        query = f"{company_name} CEO founder linkedin"
+        # 🚨 THE FIX: NO MORE DOMAIN STRIPPING!
+        # Searching EXACTLY "intuitive.ai" forces the engine to ignore "Intuitive Surgical"
+        query = f'"{company_name}" (CEO OR Founder) site:linkedin.com/in'
+        
         with DDGS() as ddgs:
-            # Grab top 3 results instead of just 1
-            results = list(ddgs.text(query, max_results=3))
+            # Grab top 5 results to ensure we have backups
+            results = list(ddgs.text(query, max_results=5))
             
             if results:
                 for r in results:
-                    title = r['title']
-                    url = r['href']
+                    title = r.get('title', '')
+                    url = r.get('href', '')
+                    title_lower = title.lower()
                     
-                    # UPGRADE: Ensure it is a human LinkedIn profile (ignores news articles)
+                    # 1. STRICT URL CHECK: Must be a user profile
                     if "linkedin.com/in" in url.lower():
-                        # Clean the text: "Saurabh Gupta - Founder..." -> "Saurabh Gupta"
-                        clean_name = title.split('-')[0].split('|')[0].strip()
                         
-                        # Make sure it didn't just grab the company name
-                        if company_name.lower() not in clean_name.lower() and len(clean_name) < 35:
-                            return {
-                                "source_title": clean_name,
-                                "url": url
-                            }
+                        # 🚨 THE MINIMAL VP ASSASSIN (Fixes Twilio only)
+                        if " vice president " in title_lower or " vp " in title_lower or title_lower.startswith("vp "):
+                            continue
+                        
+                        # 2. SLICE THE GARBAGE: "Jay Modh - CEO - Intuitive Cloud | LinkedIn" -> "Jay Modh"
+                        raw_name = re.split(r'[-|–|\||,]', title)[0].strip()
+                        
+                        # Strip out weird symbols/emojis
+                        clean_name = re.sub(r'[^\w\s\.]', '', raw_name).strip()
+                        
+                        # 3. THE TITANIUM FILTER
+                        word_count = len(clean_name.split())
+                        
+                        # Real names are usually 2-3 words (First Last). 
+                        if 1 < word_count <= 4:
                             
-                # FALLBACK: If the strict loop fails, use your exact original naive extraction
-                return {
-                    "source_title": results[0]['title'],
-                    "url": results[0]['href']
-                }
+                            # Dynamically ban the company name so it doesn't return "Intuitive" as a person
+                            company_first_word = company_name.lower().split('.')[0]
+                            forbidden = ['introducing', 'about', 'ceo', 'founder', 'news', 'profile', 'appoints', 'welcome', 'top', 'post', company_first_word]
+                            
+                            if not any(f in clean_name.lower() for f in forbidden):
+                                if len(clean_name) < 30:
+                                    print(f"   -> ✅ Verified Human Leader: {clean_name}")
+                                    return {
+                                        "source_title": clean_name,
+                                        "url": url
+                                    }
+                                    
+            # 🚨 KILLED THE FALLBACK 🚨
+            print("   -> ⚠️ No verified human profile found. Defaulting to hidden.")
+            return None
+            
     except Exception as e:
-        print(f"Leadership error: {e}")
+        print(f"⚠️ Leadership search error: {e}")
         return None
         
     return None
 
-# def find_leadership(company_name):
-#     if not company_name:
-#         return None
-        
-#     print(f"🕵️‍♂️ Searching Leadership for: {company_name}...")
-#     try:
-#         with DDGS() as ddgs:
-#             # --- TIER 1: Instant Answers (For massive companies) ---
-#             try:
-#                 answers = list(ddgs.answers(f"CEO of {company_name}"))
-#                 if answers and answers[0].get('text'):
-#                     print(f"   -> ✅ Found via Instant Answers!")
-#                     return {
-#                         "source_title": answers[0]['text'],
-#                         "url": answers[0].get('url', f"https://duckduckgo.com/?q=CEO+of+{company_name.replace(' ', '+')}")
-#                     }
-#             except:
-#                 pass
 
-#             # --- TIER 2: Wikipedia Fallback (Catches companies like SpaceX) ---
-#             try:
-#                 wiki_results = list(ddgs.text(f"CEO of {company_name} wikipedia", max_results=3))
-#                 for r in wiki_results:
-#                     title = r.get('title', '')
-#                     url = r.get('href', '')
-                    
-#                     if "wikipedia.org/wiki/" in url.lower():
-#                         # Slices "Elon Musk - Wikipedia" -> "Elon Musk"
-#                         clean_name = re.split(r'\s*[-|–]\s*', title)[0].strip()
-                        
-#                         # Prevents grabbing the company's own Wikipedia page or random lists
-#                         if clean_name.lower() != company_name.lower() and "list" not in clean_name.lower() and len(clean_name) < 30:
-#                             print(f"   -> ✅ Found via Wikipedia: {clean_name}")
-#                             return {
-#                                 "source_title": clean_name,
-#                                 "url": url
-#                             }
-#             except:
-#                 pass
+# --- 🧠 AI LOAD BALANCER SETUP ---
+# Grabs all 3 keys from your .env file
+raw_keys = [
+    os.getenv("GOOGLE_GEMINI_API_1"),
+    os.getenv("GOOGLE_GEMINI_API_2"),
+    os.getenv("GOOGLE_GEMINI_API_3")
+]
 
-#             # --- TIER 3: Strict LinkedIn (Catches Startups like UrbanPiper) ---
-#             try:
-#                 li_results = list(ddgs.text(f'"{company_name}" CEO site:linkedin.com/in', max_results=5))
-#                 for r in li_results:
-#                     title = r.get('title', '')
-#                     url = r.get('href', '')
-                    
-#                     if "linkedin.com/in" in url.lower():
-#                         clean_name = re.split(r'\s*[-|–]\s*', title)[0].strip()
-                        
-#                         forbidden_words = [
-#                             'ceo', 'founder', 'appoints', 'hiring', 'news', 
-#                             'profile', 'director', 'announces', company_name.lower()
-#                         ]
-                        
-#                         # Strict check: Are there any forbidden headline words?
-#                         is_human = not any(word in clean_name.lower() for word in forbidden_words)
-                        
-#                         if is_human and 0 < len(clean_name) <= 30:
-#                             print(f"   -> ✅ Found via LinkedIn: {clean_name}")
-#                             return {
-#                                 "source_title": clean_name,
-#                                 "url": url
-#                             }
-#             except:
-#                 pass
+# --- 🧠 BULLETPROOF API LOAD BALANCER ---
+raw_keys = [
+    os.getenv("GOOGLE_GEMINI_API_1"),
+    os.getenv("GOOGLE_GEMINI_API_2"),
+    os.getenv("GOOGLE_GEMINI_API_3")
+]
+# Only keep keys that actually exist and aren't empty strings
+valid_keys = [k for k in raw_keys if k and len(k) > 10]
+
+def generate_executive_summary(report_data, max_retries=3):
+    """Feeds raw OSINT data to Gemini using a pure REST API for true load balancing."""
+    
+    company = report_data.get("company_name", "Unknown Entity")
+    score = report_data.get("trust_score", 50)
+    leader_info = report_data.get("leadership")
+    leader_name = leader_info.get("source_title", "Unknown/Private") if leader_info else "Unknown/Private"
+    themes = ", ".join([t.get("topic", "") for t in report_data.get("themes", [])][:3])
+    
+    prompt = f"""
+    You are an elite Corporate OSINT & Employment Fraud Analyst.
+    Analyze this automated background check data for the company '{company}':
+    - Trust/Legitimacy Score: {score}/100
+    - Identified Leadership: {leader_name}
+    - Discussion Vectors: {themes}
+
+    Generate a cold, highly analytical 3-sentence "Executive Threat Briefing". 
+    Sentence 1: State the definitive risk assessment and corporate legitimacy of the entity based on the trust score.
+    Sentence 2: Analyze the leadership transparency and employee sentiment footprint.
+    Sentence 3: Provide a clear, actionable "Candidate Directive" regarding employment risk (e.g., "Entity verified; safe to proceed with interview process.").
+    
+    CRITICAL: Do not use IT-networking jargon. Focus strictly on corporate legitimacy and job-seeker risk. Output EXACTLY 3 sentences.
+    """
+
+    if not valid_keys:
+        print("⚠️ CRITICAL: No Gemini API keys found in .env!")
+    else:
+        # 🛡️ THE PURE REST API LOOP
+        for attempt in range(max_retries):
+            # Pick a random key from the valid list
+            active_key = random.choice(valid_keys)
+            
+            # Use the direct Google REST endpoint
+            url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key={active_key}"
+            payload = {"contents": [{"parts": [{"text": prompt}]}]}
+            
+            try:
+                response = requests.post(url, json=payload, headers={'Content-Type': 'application/json'})
                 
-#     except Exception as e:
-#         print(f"⚠️ Leadership search error: {e}")
-#         return None
+                if response.status_code == 200:
+                    data = response.json()
+                    return data['candidates'][0]['content']['parts'][0]['text'].strip()
+                elif response.status_code == 429:
+                    print(f"⚠️ Key Throttled (429). Swapping to backup key... (Attempt {attempt + 1}/{max_retries})")
+                    time.sleep(1) # Wait 1 second before firing the next key
+                else:
+                    print(f"⚠️ Bad Key or API Error ({response.status_code}). Swapping keys...")
+            except Exception as e:
+                print(f"⚠️ Request Failed: {e}")
+
+    # 🛡️ THE SILENT FALLBACK (Only triggers if all keys fail)
+    print("🛑 All AI Keys Exhausted/Failed. Deploying Silent Fallback.")
+    fallback_s1 = f"Entity '{company}' has been assigned a baseline trust score of {score}/100 based on available digital footprints."
+    fallback_s2 = "Automated threat vectors and leadership cross-references are currently stable but require manual verification."
+    directive = "Proceed with standard engagement protocols." if score >= 40 else "Immediate disengagement recommended due to elevated risk markers."
         
-#     return None
+    return f"{fallback_s1} {fallback_s2} {directive}"
 
 # --- NEW ROUTE FOR THE SEPARATE PAGE ---
 # @app.route('/report', methods=['POST'])
@@ -698,6 +834,10 @@ def generate_full_report():
     # 2. CACHE MISS: Run your exact original deep dive
     print(f"🐢 CACHE MISS: Generating fresh report for {company_name}...")
     report_data = deep_dive_analysis(company_name)
+
+    print("🧠 Generating AI Executive Briefing...")
+    # This adds a new 'ai_summary' field to your dictionary
+    report_data['ai_summary'] = generate_executive_summary(report_data)
 
     # 3. Save the result to Redis (expires in 24 hours)
     try:

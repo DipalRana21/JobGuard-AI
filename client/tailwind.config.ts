@@ -12,6 +12,12 @@ const config: Config = {
         background: "var(--background)",
         foreground: "var(--foreground)",
       },
+      fontFamily: {
+        // This makes Inter your default font for everything
+        sans: ['var(--font-inter)', 'sans-serif'],
+        // This creates a custom utility class for your headers
+        heading: ['var(--font-jakarta)', 'sans-serif'],
+      },
     },
   },
   plugins: [],

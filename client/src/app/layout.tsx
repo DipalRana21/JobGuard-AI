@@ -1,11 +1,21 @@
 import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
-import { Inter } from "next/font/google";
 import Navbar from "@/components/Navbar";
 import { AuthProvider } from "@/components/Provider";
+import { Plus_Jakarta_Sans, Inter } from 'next/font/google';
 
-const inter = Inter({ subsets: ["latin"] });
+const inter = Inter({ 
+  subsets: ['latin'],
+  variable: '--font-inter',
+  display: 'swap',
+});
+
+const jakarta = Plus_Jakarta_Sans({ 
+  subsets: ['latin'],
+  variable: '--font-jakarta',
+  display: 'swap',
+});
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -29,11 +39,11 @@ interface RootLayoutProps {
 export default function RootLayout({ children }: RootLayoutProps) {
   return (
     <html lang="en">
-      <body className={`${inter.className} antialiased min-h-screen flex flex-col bg-[#0f172a] text-white`}>
+      <body className={`${jakarta.variable} ${inter.variable} font-sans antialiased min-h-screen flex flex-col bg-[#0f172a] text-white`}>
         <Navbar />
         {/* pt-20 adds padding-top so content doesn't hide behind fixed Navbar */}
         <main className="flex-grow pt-20 px-4 max-w-7xl mx-auto w-full">
-          <AuthProvider>
+          <AuthProvider> 
             {children}
           </AuthProvider>
           
