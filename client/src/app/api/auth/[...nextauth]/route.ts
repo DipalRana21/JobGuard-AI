@@ -20,6 +20,9 @@ export const authOptions: NextAuthOptions = {
   session: {
     strategy: "jwt",
   },
+  pages: {
+    signIn: "/login", // This forces NextAuth to use custom page!
+  },
   callbacks: {
     async session({ session, token }) {
       if (session.user && token.sub) {

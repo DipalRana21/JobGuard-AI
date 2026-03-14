@@ -1,12 +1,12 @@
 "use client";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import axios from "axios";
 import { AlertTriangle, CheckCircle, XCircle, Search, Loader2, Globe, ShieldAlert, Briefcase, ExternalLink, X } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import clsx from "clsx";
 import { MessageSquare, ThumbsDown, ThumbsUp, Minus } from "lucide-react";
 import { useRouter } from "next/navigation";
-import { useSession } from "next-auth/react";
+import { useSession, signIn } from "next-auth/react";
 
 // Define the shape of the API response (TypeScript Magic)
 interface ScanResult {
@@ -38,8 +38,31 @@ export default function Analyzer() {
   const router = useRouter();
   const { data: session } = useSession();
 
+  useEffect(() => {
+    const savedText = localStorage.getItem("draft_text");
+    const savedCompany = localStorage.getItem("draft_company");
+    const savedUrl = localStorage.getItem("draft_url");
+
+    if (savedText) setText(savedText);
+    if (savedCompany) setCompanyName(savedCompany);
+    if (savedUrl) setUrl(savedUrl);
+  }, []);
+
+  useEffect(() => {
+    localStorage.setItem("draft_text", text);
+    localStorage.setItem("draft_company", companyName);
+    localStorage.setItem("draft_url", url);
+  }, [text, companyName, url]);
+
  const handleAnalyze = async () => {
     if (!text) return;
+
+    if (!session) {
+      // signIn() automatically handles the redirect. 
+      signIn(undefined, { callbackUrl: '/' }); 
+      return; 
+    }
+
     setLoading(true);
     setError("");
     setResult(null);
@@ -87,6 +110,11 @@ export default function Analyzer() {
           riskScore: mlData.risk_score,
         });
         console.log("✅ Exact ML Risk Score saved to database!");
+
+      // Clear the browser memory since the scan was successful
+      localStorage.removeItem("draft_text");
+      localStorage.removeItem("draft_company");
+      localStorage.removeItem("draft_url");
       }
       
     } catch (err) {

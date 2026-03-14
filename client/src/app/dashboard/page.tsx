@@ -19,6 +19,16 @@ export default function DashboardPage() {
   const [scans, setScans] = useState<any[]>([]);
   const [loadingScans, setLoadingScans] = useState(true);
 
+  const handleLogout = async () => {
+    // 1. Wipe the drafts from the browser for privacy
+    localStorage.removeItem("draft_text");
+    localStorage.removeItem("draft_company");
+    localStorage.removeItem("draft_url");
+
+    // 2. Terminate the session and send them back to the homepage
+    await signOut({ callbackUrl: "/login" });
+  };
+
   useEffect(() => {
     if (status === "authenticated") {
       const fetchHistory = async () => {
@@ -96,7 +106,7 @@ export default function DashboardPage() {
             </button>
 
             <button
-              onClick={() => signOut({ callbackUrl: "/login" })}
+              onClick={handleLogout}
               className="w-full flex items-center gap-3 px-5 py-3 text-red-400 hover:bg-red-500/10 rounded-xl font-medium transition-all"
             >
               <LogOut className="w-5 h-5" /> Sign Out
