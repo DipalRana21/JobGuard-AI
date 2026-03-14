@@ -44,13 +44,22 @@ export default function Analyzer() {
     setError("");
     setResult(null);
 
-    // 📡 1. FIRE THE RADAR FIRST (INSTANTLY)
-    // This shoots the popup to all browsers in 0.01 seconds before the heavy ML starts!
+   // 🕵️‍♂️ 1. GET OR CREATE A DIGITAL FINGERPRINT FOR THIS TAB
+    let myTabId = sessionStorage.getItem("tab_id");
+    if (!myTabId) {
+      myTabId = Math.random().toString(36).substring(7);
+      sessionStorage.setItem("tab_id", myTabId);
+    }
+
+    // 📡 2. FIRE THE RADAR (Include your fingerprint!)
     try {
       await fetch("http://127.0.0.1:5000/radar", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ company_name: companyName || "Unknown" }), 
+        body: JSON.stringify({ 
+          company_name: companyName || "Unknown",
+          sender_id: myTabId // 👈 Send it to Python
+        }), 
       });
     } catch (err) {
       console.log("Radar ping failed", err);

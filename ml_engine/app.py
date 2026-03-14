@@ -616,22 +616,6 @@ def deep_dive_analysis(company_name):
         "risk_flags": risk_flags
     }
 
-# --- HELPER: LEADERSHIP FINDER ---
-# def find_leadership(company_name):
-#     # Tries to find the CEO/Founder via Search
-#     try:
-#         query = f"{company_name} CEO founder linkedin"
-#         with DDGS() as ddgs:
-#             results = list(ddgs.text(query, max_results=1))
-#             if results:
-#                 # Naive extraction: Just return the title and snippet
-#                 return {
-#                     "source_title": results[0]['title'], # e.g. "Saurabh Gupta - Founder - UrbanPiper"
-#                     "url": results[0]['href']
-#                 }
-#     except:
-#         return None
-#     return None
 
 # def find_leadership(company_name):
 #     # Tries to find the CEO/Founder via Search
@@ -669,6 +653,7 @@ def deep_dive_analysis(company_name):
         
 #     return None
 
+# imp
 def find_leadership(company_name):
     print(f"🕵️‍♂️ Searching Leadership for: {company_name}...")
     if not company_name:
@@ -730,14 +715,6 @@ def find_leadership(company_name):
         
     return None
 
-
-# --- 🧠 AI LOAD BALANCER SETUP ---
-# Grabs all 3 keys from your .env file
-raw_keys = [
-    os.getenv("GOOGLE_GEMINI_API_1"),
-    os.getenv("GOOGLE_GEMINI_API_2"),
-    os.getenv("GOOGLE_GEMINI_API_3")
-]
 
 # --- 🧠 BULLETPROOF API LOAD BALANCER ---
 raw_keys = [
@@ -810,21 +787,25 @@ def generate_executive_summary(report_data, max_retries=3):
 @app.route('/radar', methods=['POST'])
 def trigger_radar():
     data = request.json
-    # .strip() removes accidental blank spaces
     company_name = data.get('company_name', '').strip()
     
-    # 🛑 THE SPAM FILTER 🛑
-    # If the frontend accidentally sends a blank search, ignore it completely!
+    # 🕵️‍♂️ Grab the digital fingerprint (default to 'unknown' if missing)
+    sender_id = data.get('sender_id', 'unknown')
+    
     if not company_name:
         return jsonify({"error": "Blank search ignored"}), 400
         
-    print(f"📢 [RADAR] Broadcasting active scan for: {company_name}")
     try:
-        socketio.emit('live_scan_feed', {'company_name': company_name})
+        # Broadcast the company AND the fingerprint
+        socketio.emit('live_scan_feed', {
+            'company_name': company_name,
+            'sender_id': sender_id
+        })
         return jsonify({"status": "broadcast_success"}), 200
     except Exception as e:
         print(f"❌ [RADAR] Error: {e}")
         return jsonify({"error": str(e)}), 500
+
 
 @app.route('/report', methods=['POST'])
 def generate_full_report():

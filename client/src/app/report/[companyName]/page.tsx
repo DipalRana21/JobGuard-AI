@@ -476,6 +476,7 @@ export default function DeepDiveReport() {
       : data?.trust_score >= 50
         ? "from-yellow-400 to-orange-400"
         : "from-red-400 to-rose-500";
+        
 
   return (
     <div className="min-h-screen bg-[#0b1120] text-white p-6 md:p-14 relative overflow-hidden">

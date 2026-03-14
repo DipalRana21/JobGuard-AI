@@ -1,7 +1,6 @@
 
 import Analyzer from "@/components/Analyzer";
 import { BrainCircuit, Lock, Globe } from "lucide-react";
-import LiveTicker from "@/components/LiveTicker";
 
 export default function Home() {
   return (
@@ -44,7 +43,6 @@ export default function Home() {
         <Analyzer />
       </div>
 
-      <LiveTicker />
 
       {/* ================= FEATURES ================= */}
       <section className="mt-40 max-w-6xl mx-auto px-6">

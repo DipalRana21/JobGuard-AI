@@ -4,6 +4,7 @@ import "./globals.css";
 import Navbar from "@/components/Navbar";
 import { AuthProvider } from "@/components/Provider";
 import { Plus_Jakarta_Sans, Inter } from 'next/font/google';
+import LiveTicker from "@/components/LiveTicker";
 
 const inter = Inter({ 
   subsets: ['latin'],
@@ -45,6 +46,7 @@ export default function RootLayout({ children }: RootLayoutProps) {
         <main className="flex-grow pt-20 px-4 max-w-7xl mx-auto w-full">
           <AuthProvider> 
             {children}
+            <LiveTicker />
           </AuthProvider>
           
         </main>
