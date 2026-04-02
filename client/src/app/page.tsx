@@ -11,29 +11,24 @@ export default function Home() {
       <div className="absolute -bottom-40 -right-40 w-[700px] h-[700px] bg-purple-600/10 blur-[160px] rounded-full" />
       <div className="absolute inset-0 bg-[radial-gradient(circle_at_center,rgba(59,130,246,0.08),transparent_60%)] pointer-events-none" />
 
-      {/* ================= HERO SECTION ================= */}
-      <section className="text-center space-y-8 py-24 md:py-32 relative max-w-6xl mx-auto px-6">
+     {/* ================= HERO SECTION ================= */}
+      <section className="text-center space-y-8 py-24 md:py-32 relative max-w-6xl mx-auto px-6 z-10">
 
-        {/* AI Status Badge */}
-        <div className="inline-flex items-center gap-3 px-6 py-2 rounded-full bg-green-500/10 border border-green-500/30 text-green-400 text-xs font-bold uppercase tracking-[0.3em] animate-pulse">
+        {/* OSINT Status Badge */}
+        <div className="inline-flex items-center gap-3 px-5 py-2 rounded-full bg-blue-500/10 border border-blue-500/30 text-green-400 text-xs font-bold uppercase tracking-widest shadow-[0_0_20px_rgba(59,130,246,0.2)]">
           <span className="w-2 h-2 bg-green-400 rounded-full animate-ping" />
-          AI Neural Engine Active
+          Live OSINT Radar Active
         </div>
 
         <h1 className="text-5xl md:text-7xl font-black tracking-tight leading-tight text-white">
-          Is that Job{" "}
-          <span className="text-transparent bg-clip-text bg-gradient-to-r from-blue-400 via-cyan-300 to-purple-400 animate-gradient-x">
-            Real or Fake?
+          Enterprise-Grade <br className="hidden md:block" />
+          <span className="text-transparent bg-clip-text bg-gradient-to-r from-blue-400 via-cyan-300 to-purple-400">
+            Threat Intelligence.
           </span>
         </h1>
 
-        <p className="text-lg md:text-xl text-gray-400 max-w-3xl mx-auto leading-relaxed">
-          The world’s first{" "}
-          <span className="text-blue-200 font-semibold">
-            AI-powered job scam intelligence system
-          </span>
-          . Paste a job description and let our neural network perform
-          domain forensics, pattern recognition, and sentiment intelligence.
+        <p className="text-lg md:text-xl text-slate-400 max-w-3xl mx-auto leading-relaxed font-medium">
+          Deploy autonomous web scrapers and neural networks to verify corporate leadership, analyze domain forensics, and neutralize employment fraud before you ever submit your resume.
         </p>
 
       </section>
