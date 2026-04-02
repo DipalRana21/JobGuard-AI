@@ -1,5 +1,5 @@
-import eventlet
-eventlet.monkey_patch()
+from gevent import monkey
+monkey.patch_all()
 import os
 import threading
 from dotenv import load_dotenv
@@ -37,7 +37,7 @@ redis_url = os.environ.get("REDIS_URL", "redis://localhost:6379")
 
 # 2. Try to connect, but don't crash the server if it fails!
 try:
-    cache = redis.from_url(redis_url, decode_responses=True)
+    cache = redis.from_url(redis_url, decode_responses=True, socket_timeout=5)
     cache.ping()  # Ping it to verify the connection is alive
     print("✅ Connected to Redis successfully!")
 except Exception as e:
@@ -109,7 +109,7 @@ CORS(app)
 
 # async_mode='threading' prevents the Werkzeug "write() before start_response" crash!
 # socketio = SocketIO(app, cors_allowed_origins="*", async_mode='threading')
-socketio = SocketIO(app, cors_allowed_origins="*", async_mode='eventlet')
+socketio = SocketIO(app, cors_allowed_origins="*", async_mode='gevent')
 
 lemmatizer = WordNetLemmatizer()
 stop_words = set(stopwords.words('english'))
