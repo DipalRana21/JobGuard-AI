@@ -76,12 +76,12 @@ export default function Analyzer() {
 
     // 📡 2. FIRE THE RADAR (Include your fingerprint!)
     try {
-      await fetch("http://127.0.0.1:5000/radar", {
+      await fetch(`${process.env.NEXT_PUBLIC_API_URL}/radar`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ 
           company_name: companyName || "Unknown",
-          sender_id: myTabId // 👈 Send it to Python
+          sender_id: myTabId //  Send it to Python
         }), 
       });
     } catch (err) {
@@ -91,7 +91,8 @@ export default function Analyzer() {
     try {
       // 🐢 2. NOW START THE HEAVY ML PREDICTION
       // By the time this runs, the blue alert is already sliding down the screen
-      const response = await axios.post("http://127.0.0.1:5000/predict", {
+      // const response = await axios.post("http://127.0.0.1:5000/predict", {
+      const response = await axios.post(`${process.env.NEXT_PUBLIC_API_URL}/predict`, {
         text: text,
         url: url,
         company_name: companyName

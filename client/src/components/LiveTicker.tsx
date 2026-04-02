@@ -105,7 +105,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import { Activity, Radio, Flame } from "lucide-react";
 import { usePathname } from "next/navigation";
 
-const socket = io("http://localhost:5000", {
+const socket = io(process.env.NEXT_PUBLIC_API_URL, {
   transports: ["websocket", "polling"],
   reconnectionAttempts: 5,
 });
