@@ -1,306 +1,13 @@
-// "use client";
-
-// import { signIn } from "next-auth/react";
-// import { Shield, Github, Mail, Activity, Search, ShieldCheck } from "lucide-react";
-// import { useState, useEffect, useRef } from "react";
-// import { useSearchParams } from "next/navigation";
-
-// export default function LoginPage() {
-//   const [googleLoading, setGoogleLoading] = useState(false);
-//   const [githubLoading, setGithubLoading] = useState(false);
-
-//   const searchParams = useSearchParams();
-//   const callbackUrl = searchParams.get("callbackUrl") || "/dashboard";
-
-//   const cardRef = useRef<HTMLDivElement>(null);
-
-//   const loginGoogle = async () => {
-//     setGoogleLoading(true);
-//     await signIn("google", { callbackUrl });
-//   };
-
-//   const loginGithub = async () => {
-//     setGithubLoading(true);
-//     await signIn("github", { callbackUrl });
-//   };
-
-//   /* ================= MOUSE SPOTLIGHT ================= */
-
-//   useEffect(() => {
-//     const handleMove = (e: MouseEvent) => {
-//       document.documentElement.style.setProperty("--x", `${e.clientX}px`);
-//       document.documentElement.style.setProperty("--y", `${e.clientY}px`);
-//     };
-
-//     window.addEventListener("mousemove", handleMove);
-//     return () => window.removeEventListener("mousemove", handleMove);
-//   }, []);
-
-//   /* ================= 3D CARD TILT ================= */
-
-//   const handleMouseMove = (e: any) => {
-//     const card = cardRef.current;
-//     if (!card) return;
-
-//     const rect = card.getBoundingClientRect();
-//     const x = e.clientX - rect.left;
-//     const y = e.clientY - rect.top;
-
-//     const centerX = rect.width / 2;
-//     const centerY = rect.height / 2;
-
-//     const rotateX = (y - centerY) / 25;
-//     const rotateY = (centerX - x) / 25;
-
-//     card.style.transform = `rotateX(${rotateX}deg) rotateY(${rotateY}deg)`;
-//   };
-
-//   const resetTilt = () => {
-//     const card = cardRef.current;
-//     if (card) card.style.transform = "rotateX(0deg) rotateY(0deg)";
-//   };
-
-//   return (
-//     <div className="relative min-h-screen w-full flex bg-[#050a16] text-white overflow-hidden font-sans">
-
-//       {/* ================= GLOBAL STYLES ================= */}
-
-//       <style>{`
-
-//       body::before{
-//         content:"";
-//         position:fixed;
-//         inset:0;
-//         background: radial-gradient(circle at var(--x) var(--y),
-//         rgba(59,130,246,0.15),
-//         transparent 40%);
-//         pointer-events:none;
-//         z-index:1;
-//       }
-
-//       .cyber-grid{
-//         background-image:
-//         linear-gradient(rgba(255,255,255,0.03) 1px, transparent 1px),
-//         linear-gradient(90deg, rgba(255,255,255,0.03) 1px, transparent 1px);
-//         background-size:40px 40px;
-//         animation:gridMove 40s linear infinite;
-//       }
-
-//       @keyframes gridMove{
-//         from{background-position:0 0;}
-//         to{background-position:400px 400px;}
-//       }
-
-//       .radar{
-//         width:450px;
-//         height:450px;
-//         border-radius:50%;
-//         border:1px solid rgba(59,130,246,0.2);
-//         position:absolute;
-//         animation:spin 12s linear infinite;
-//       }
-
-//       .radar::after{
-//         content:"";
-//         position:absolute;
-//         inset:0;
-//         background:conic-gradient(
-//         rgba(59,130,246,0.6),
-//         transparent 40%);
-//         border-radius:50%;
-//       }
-
-//       @keyframes spin{
-//         from{transform:rotate(0deg);}
-//         to{transform:rotate(360deg);}
-//       }
-
-//       .glow-btn{
-//         position:relative;
-//         overflow:hidden;
-//       }
-
-//       .glow-btn::before{
-//         content:"";
-//         position:absolute;
-//         inset:-2px;
-//         background:linear-gradient(90deg,#3b82f6,#8b5cf6,#06b6d4);
-//         opacity:0;
-//         transition:0.4s;
-//         filter:blur(10px);
-//       }
-
-//       .glow-btn:hover::before{
-//         opacity:0.7;
-//       }
-
-//       .scan{
-//         position:absolute;
-//         width:100%;
-//         height:2px;
-//         background:linear-gradient(to right,transparent,#3b82f6,transparent);
-//         animation:scan 3s linear infinite;
-//       }
-
-//       @keyframes scan{
-//         from{top:0}
-//         to{top:100%}
-//       }
-
-//       `}</style>
-
-//       {/* ================= BACKGROUND ================= */}
-
-//       <div className="absolute inset-0 cyber-grid" />
-
-//       <div className="absolute top-[-200px] left-[-200px] w-[600px] h-[600px] bg-blue-600/20 blur-[180px] rounded-full" />
-//       <div className="absolute bottom-[-200px] right-[-200px] w-[600px] h-[600px] bg-purple-600/20 blur-[180px] rounded-full" />
-
-//       {/* ================= LEFT LOGIN ================= */}
-
-//       <div className="w-full lg:w-1/2 flex items-center justify-center p-10 relative z-10">
-
-//         <div
-//           ref={cardRef}
-//           onMouseMove={handleMouseMove}
-//           onMouseLeave={resetTilt}
-//           className="relative w-full max-w-md transition-transform duration-200"
-//         >
-
-//           <div className="scan" />
-
-//           <div className="backdrop-blur-3xl bg-white/5 border border-white/10 rounded-3xl p-10 shadow-[0_0_80px_rgba(0,0,0,0.8)]">
-
-//             {/* LOGO */}
-
-//             <div className="flex flex-col items-center mb-10">
-
-//               <div className="relative">
-//                 <div className="absolute inset-0 bg-blue-500/30 blur-2xl rounded-xl animate-pulse"/>
-//                 <div className="relative w-20 h-20 bg-gradient-to-br from-blue-500 to-purple-600 rounded-xl flex items-center justify-center">
-//                   <Shield className="w-10 h-10"/>
-//                 </div>
-//               </div>
-
-//               <h1 className="text-3xl font-black mt-6">Secure Access</h1>
-
-//               <p className="text-gray-400 text-sm text-center mt-2 max-w-xs">
-//                 Authenticate to access JobGuard’s AI-powered corporate threat intelligence.
-//               </p>
-
-//             </div>
-
-//             {/* GOOGLE */}
-
-//             <button
-//               onClick={loginGoogle}
-//               disabled={googleLoading}
-//               className="glow-btn relative w-full flex items-center justify-center gap-3 py-4 rounded-xl bg-white text-black font-semibold mb-4 hover:scale-[1.02] transition"
-//             >
-//               {googleLoading ? (
-//                 <div className="w-5 h-5 border-2 border-black border-t-transparent rounded-full animate-spin"/>
-//               ) : (
-//                 <>
-//                 <svg className="w-5 h-5" viewBox="0 0 24 24">
-//                   <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/>
-//                 </svg>
-//                 Continue with Google
-//                 </>
-//               )}
-//             </button>
-
-//             {/* GITHUB */}
-
-//             <button
-//               onClick={loginGithub}
-//               disabled={githubLoading}
-//               className="glow-btn w-full flex items-center justify-center gap-3 py-4 rounded-xl bg-[#1f2937] border border-white/10 font-semibold hover:scale-[1.02] transition"
-//             >
-//               {githubLoading ? (
-//                 <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin"/>
-//               ) : (
-//                 <>
-//                 <Github className="w-5 h-5"/>
-//                 Continue with GitHub
-//                 </>
-//               )}
-//             </button>
-
-//             <div className="mt-8 text-center text-xs text-gray-500 flex items-center justify-center gap-2">
-//               <Mail className="w-3 h-3"/>
-//               Secured by NextAuth • OAuth 2.0
-//             </div>
-
-//           </div>
-//         </div>
-//       </div>
-
-//       {/* ================= RIGHT SIDE ================= */}
-
-//       <div className="hidden lg:flex w-1/2 items-center justify-center relative z-10">
-
-//         <div className="radar"/>
-
-//         <div className="max-w-xl p-16">
-
-//           <h2 className="text-4xl font-black bg-gradient-to-r from-blue-400 to-cyan-300 text-transparent bg-clip-text mb-6">
-//             JobGuard Intelligence Radar
-//           </h2>
-
-//           <p className="text-gray-400 text-lg mb-12">
-//             Detect fraudulent companies before they reach your inbox using
-//             AI-driven OSINT intelligence.
-//           </p>
-
-//           <div className="space-y-8">
-
-//             <Feature icon={<Activity className="w-6 h-6 text-blue-400"/>}
-//             title="Real-Time Threat Radar"
-//             text="Continuous monitoring of suspicious company domains."/>
-
-//             <Feature icon={<Search className="w-6 h-6 text-purple-400"/>}
-//             title="Deep OSINT Scraping"
-//             text="Cross-checking leadership records and online signals."/>
-
-//             <Feature icon={<ShieldCheck className="w-6 h-6 text-emerald-400"/>}
-//             title="AI Risk Scoring"
-//             text="Machine learning powered trust score generation."/>
-
-//           </div>
-
-//         </div>
-
-//       </div>
-
-//     </div>
-//   );
-// }
-
-// function Feature({icon,title,text}:any){
-//   return(
-//     <div className="flex items-start gap-4">
-//       <div className="p-3 bg-white/5 border border-white/10 rounded-xl">
-//         {icon}
-//       </div>
-//       <div>
-//         <h3 className="font-bold text-lg">{title}</h3>
-//         <p className="text-gray-500 text-sm mt-1">{text}</p>
-//       </div>
-//     </div>
-//   )
-// }
-
 "use client";
 
 import { signIn } from "next-auth/react";
 import { Shield, Github, Mail, Activity, Search, ShieldCheck } from "lucide-react";
-import { useState, useRef, MouseEvent as ReactMouseEvent } from "react";
+import { useState, useRef, MouseEvent as ReactMouseEvent, Suspense } from "react";
 import { useSearchParams } from "next/navigation";
 import { Inter } from "next/font/google";
-
 const inter = Inter({ subsets: ["latin"], display: "swap" });
 
-export default function LoginPage() {
+function LoginContent() {
   const [googleLoading, setGoogleLoading] = useState(false);
   const [githubLoading, setGithubLoading] = useState(false);
 
@@ -523,5 +230,18 @@ function Feature({ icon, title, text }: FeatureProps) {
         <p className="text-slate-500 text-sm mt-1 leading-relaxed">{text}</p>
       </div>
     </div>
+  );
+}
+
+// This is the new default export that wraps your logic in Suspense
+export default function LoginPage() {
+  return (
+    <Suspense fallback={
+      <div className="min-h-screen w-full bg-[#030712] flex items-center justify-center">
+        <div className="w-8 h-8 border-4 border-blue-500 border-t-transparent rounded-full animate-spin" />
+      </div>
+    }>
+      <LoginContent />
+    </Suspense>
   );
 }
