@@ -11,7 +11,7 @@ import re
 import nltk
 from nltk.corpus import stopwords
 from nltk.stem import WordNetLemmatizer
-from duckduckgo_search import DDGS
+from ddgs import DDGS
 from vaderSentiment.vaderSentiment import SentimentIntensityAnalyzer
 from collections import Counter
 import hashlib
