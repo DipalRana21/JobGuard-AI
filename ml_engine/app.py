@@ -957,7 +957,14 @@ def test_socket():
         print(f"❌ [DIAGNOSTIC] Emit FAILED: {e}")
         return f"Error: {e}", 500
 
+# if __name__ == '__main__':
+#     print("🚀 Nexus-CISO WebSocket Server Online...")
+#     # Notice we use socketio.run instead of app.run now!
+#     socketio.run(app, debug=True, port=5000, host="0.0.0.0", allow_unsafe_werkzeug=True)
+
 if __name__ == '__main__':
-    print("🚀 Nexus-CISO WebSocket Server Online...")
-    # Notice we use socketio.run instead of app.run now!
-    socketio.run(app, debug=True, port=5000, host="0.0.0.0", allow_unsafe_werkzeug=True)
+    # 1. Grab Render's dynamic port, or fallback to 10000
+    port = int(os.environ.get("PORT", 10000))
+    
+    # 2. Start the server on Render's port and turn OFF debug mode for production
+    socketio.run(app, host="0.0.0.0", port=port, debug=False, allow_unsafe_werkzeug=True)
