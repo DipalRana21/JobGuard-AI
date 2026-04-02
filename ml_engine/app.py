@@ -93,6 +93,7 @@ except LookupError:
 app = Flask(__name__)
 CORS(app)
 
+
 # async_mode='threading' prevents the Werkzeug "write() before start_response" crash!
 socketio = SocketIO(app, cors_allowed_origins="*", async_mode='threading')
 

@@ -55,10 +55,18 @@ export default function Analyzer() {
   }, [text, companyName, url]);
 
  const handleAnalyze = async () => {
-    if (!text) return;
+
+    if (!text || text.trim() === "") {
+      setError("Please paste a job description.");
+      return;
+    }
+    
+    if (!companyName || companyName.trim() === "") {
+      setError("Please enter a Company Name. We need this to search for fraud records.");
+      return;
+    }
 
     if (!session) {
-      // signIn() automatically handles the redirect. 
       signIn(undefined, { callbackUrl: '/' }); 
       return; 
     }
@@ -177,10 +185,10 @@ export default function Analyzer() {
 
             <button
               onClick={handleAnalyze}
-              disabled={loading || !text}
+              disabled={loading || !text || !companyName}
               className={clsx(
                 "w-full py-4 rounded-xl font-bold text-lg flex items-center justify-center gap-3 transition-all",
-                loading || !text
+                loading || !text || !companyName
                   ? "bg-gray-700 text-gray-400"
                   : "bg-gradient-to-r from-blue-600 to-cyan-500 hover:scale-[1.02] hover:shadow-[0_0_25px_rgba(59,130,246,0.5)]"
               )}
