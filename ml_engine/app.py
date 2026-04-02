@@ -821,7 +821,6 @@ def trigger_radar():
         print(f"❌ [RADAR] Error: {e}")
         return jsonify({"error": str(e)}), 500
 
-
 @app.route('/report', methods=['POST'])
 def generate_full_report():
     data = request.json
@@ -831,11 +830,15 @@ def generate_full_report():
         return jsonify({"error": "Company name is required"}), 400
 
     cache_key = f"report:{company_name.lower().replace(' ', '')}"
+    
+    # 💥 FIX 1: We MUST define this variable before the try block!
+    cached_data = None  
 
     # 1. REDIS CACHE HIT
     try:
-        if cache:
+        if cache is not None:
             cached_data = cache.get(cache_key)
+            
         if cached_data:
             print(f"⚡ CACHE HIT: Returning instant report for {company_name}")
             return jsonify(json.loads(cached_data))
@@ -850,13 +853,51 @@ def generate_full_report():
     report_data['ai_summary'] = generate_executive_summary(report_data)
 
     # 3. Save to Redis
-    try:
-        cache.setex(cache_key, 86400, json.dumps(report_data))
-        print(f"💾 Saved {company_name} to Redis cache!")
-    except Exception as e:
-        print(f"⚠️ Redis Write Error: {e}")
+    # 💥 FIX 2: We MUST make sure cache actually exists before trying to save!
+    if cache is not None:
+        try:
+            cache.setex(cache_key, 86400, json.dumps(report_data))
+            print(f"💾 Saved {company_name} to Redis cache!")
+        except Exception as e:
+            print(f"⚠️ Redis Write Error: {e}")
 
     return jsonify(report_data)
+
+# @app.route('/report', methods=['POST'])
+# def generate_full_report():
+#     data = request.json
+#     company_name = data.get('company_name')
+
+#     if not company_name:
+#         return jsonify({"error": "Company name is required"}), 400
+
+#     cache_key = f"report:{company_name.lower().replace(' ', '')}"
+
+#     # 1. REDIS CACHE HIT
+#     try:
+#         if cache:
+#             cached_data = cache.get(cache_key)
+#         if cached_data:
+#             print(f"⚡ CACHE HIT: Returning instant report for {company_name}")
+#             return jsonify(json.loads(cached_data))
+#     except Exception as e:
+#         print(f"⚠️ Redis Read Error: {e}")
+
+#     # 2. CACHE MISS: Run the deep dive
+#     print(f"🐢 CACHE MISS: Generating fresh report for {company_name}...")
+#     report_data = deep_dive_analysis(company_name)
+
+#     print("🧠 Generating AI Executive Briefing...")
+#     report_data['ai_summary'] = generate_executive_summary(report_data)
+
+#     # 3. Save to Redis
+#     try:
+#         cache.setex(cache_key, 86400, json.dumps(report_data))
+#         print(f"💾 Saved {company_name} to Redis cache!")
+#     except Exception as e:
+#         print(f"⚠️ Redis Write Error: {e}")
+
+#     return jsonify(report_data)
 
 # --- API ENDPOINT ---
 @app.route('/predict', methods=['POST'])
