@@ -30,8 +30,19 @@ load_dotenv()
 
 # Connect to the local Redis server
 # decode_responses=True ensures we get normal strings back instead of byte-strings
-cache = redis.Redis(host='localhost', port=6379, decode_responses=True)
-CACHE_EXPIRATION_SECONDS = 86400  # Cache reports for 24 hours (60 * 60 * 24)
+# cache = redis.Redis(host='localhost', port=6379, decode_responses=True)
+# CACHE_EXPIRATION_SECONDS = 86400  # Cache reports for 24 hours (60 * 60 * 24)
+
+redis_url = os.environ.get("REDIS_URL", "redis://localhost:6379")
+
+# 2. Try to connect, but don't crash the server if it fails!
+try:
+    cache = redis.from_url(redis_url, decode_responses=True)
+    cache.ping()  # Ping it to verify the connection is alive
+    print("✅ Connected to Redis successfully!")
+except Exception as e:
+    print(f"⚠️ Redis Connection Failed: {e}")
+    cache = None 
 
 # Legit companies don't hire on these.
 SUSPICIOUS_HOSTS = [
@@ -823,7 +834,8 @@ def generate_full_report():
 
     # 1. REDIS CACHE HIT
     try:
-        cached_data = cache.get(cache_key)
+        if cache:
+            cached_data = cache.get(cache_key)
         if cached_data:
             print(f"⚡ CACHE HIT: Returning instant report for {company_name}")
             return jsonify(json.loads(cached_data))
