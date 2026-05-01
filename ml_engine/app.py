@@ -25,6 +25,7 @@ import time
 import requests
 from google import genai
 from flask_socketio import SocketIO
+import urllib.parse
 
 load_dotenv()
 
@@ -731,73 +732,6 @@ def find_leadership(company_name):
     return None
 
 
-# --- 🧠 BULLETPROOF API LOAD BALANCER ---
-raw_keys = [
-    os.getenv("GOOGLE_GEMINI_API_1"),
-    os.getenv("GOOGLE_GEMINI_API_2"),
-    os.getenv("GOOGLE_GEMINI_API_3")
-]
-# Only keep keys that actually exist and aren't empty strings
-valid_keys = [k for k in raw_keys if k and len(k) > 10]
-
-def generate_executive_summary(report_data, max_retries=3):
-    """Feeds raw OSINT data to Gemini using a pure REST API for true load balancing."""
-    
-    company = report_data.get("company_name", "Unknown Entity")
-    score = report_data.get("trust_score", 50)
-    leader_info = report_data.get("leadership")
-    leader_name = leader_info.get("source_title", "Unknown/Private") if leader_info else "Unknown/Private"
-    themes = ", ".join([t.get("topic", "") for t in report_data.get("themes", [])][:3])
-    
-    prompt = f"""
-    You are an elite Corporate OSINT & Employment Fraud Analyst.
-    Analyze this automated background check data for the company '{company}':
-    - Trust/Legitimacy Score: {score}/100
-    - Identified Leadership: {leader_name}
-    - Discussion Vectors: {themes}
-
-    Generate a cold, highly analytical 3-sentence "Executive Threat Briefing". 
-    Sentence 1: State the definitive risk assessment and corporate legitimacy of the entity based on the trust score.
-    Sentence 2: Analyze the leadership transparency and employee sentiment footprint.
-    Sentence 3: Provide a clear, actionable "Candidate Directive" regarding employment risk (e.g., "Entity verified; safe to proceed with interview process.").
-    
-    CRITICAL: Do not use IT-networking jargon. Focus strictly on corporate legitimacy and job-seeker risk. Output EXACTLY 3 sentences.
-    """
-
-    if not valid_keys:
-        print("⚠️ CRITICAL: No Gemini API keys found in .env!")
-    else:
-        # 🛡️ THE PURE REST API LOOP
-        for attempt in range(max_retries):
-            # Pick a random key from the valid list
-            active_key = random.choice(valid_keys)
-            
-            # Use the direct Google REST endpoint
-            url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key={active_key}"
-            payload = {"contents": [{"parts": [{"text": prompt}]}]}
-            
-            try:
-                response = requests.post(url, json=payload, headers={'Content-Type': 'application/json'})
-                
-                if response.status_code == 200:
-                    data = response.json()
-                    return data['candidates'][0]['content']['parts'][0]['text'].strip()
-                elif response.status_code == 429:
-                    print(f"⚠️ Key Throttled (429). Swapping to backup key... (Attempt {attempt + 1}/{max_retries})")
-                    time.sleep(1) # Wait 1 second before firing the next key
-                else:
-                    print(f"⚠️ Bad Key or API Error ({response.status_code}). Swapping keys...")
-            except Exception as e:
-                print(f"⚠️ Request Failed: {e}")
-
-    # 🛡️ THE SILENT FALLBACK (Only triggers if all keys fail)
-    print("🛑 All AI Keys Exhausted/Failed. Deploying Silent Fallback.")
-    fallback_s1 = f"Entity '{company}' has been assigned a baseline trust score of {score}/100 based on available digital footprints."
-    fallback_s2 = "Automated threat vectors and leadership cross-references are currently stable but require manual verification."
-    directive = "Proceed with standard engagement protocols." if score >= 40 else "Immediate disengagement recommended due to elevated risk markers."
-        
-    return f"{fallback_s1} {fallback_s2} {directive}"
-
 # 🚀 THE LIGHTNING RADAR ROUTE
 @app.route('/radar', methods=['POST'])
 def trigger_radar():
@@ -820,6 +754,8 @@ def trigger_radar():
     except Exception as e:
         print(f"❌ [RADAR] Error: {e}")
         return jsonify({"error": str(e)}), 500
+
+
 
 @app.route('/report', methods=['POST'])
 def generate_full_report():
@@ -848,9 +784,6 @@ def generate_full_report():
     # 2. CACHE MISS: Run the deep dive
     print(f"🐢 CACHE MISS: Generating fresh report for {company_name}...")
     report_data = deep_dive_analysis(company_name)
-
-    print("🧠 Generating AI Executive Briefing...")
-    report_data['ai_summary'] = generate_executive_summary(report_data)
 
     # 3. Save to Redis
     # 💥 FIX 2: We MUST make sure cache actually exists before trying to save!
@@ -1023,4 +956,5 @@ def test_socket():
 
 if __name__ == '__main__':
     port = int(os.environ.get("PORT", 10000))
+    print(f"🚀 Gevent Production Server running on http://127.0.0.1:{port}", flush=True)
     socketio.run(app, host="0.0.0.0", port=port)
